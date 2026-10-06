@@ -1,3 +1,3 @@
-# daycare_app
+# Adey
 
-A new Flutter project.
+A Flutter daycare management system.

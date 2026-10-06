@@ -8,16 +8,16 @@ import 'screens/app_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const DaycareApp());
+  runApp(const AdeyApp());
 }
 
-class DaycareApp extends StatelessWidget {
-  const DaycareApp({super.key});
+class AdeyApp extends StatelessWidget {
+  const AdeyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Daycare Manager',
+      title: 'Adey',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const _AppStartup(),
