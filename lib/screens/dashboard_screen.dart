@@ -86,9 +86,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(formatDate(DateTime.now()).toUpperCase(), style: AppText.monoLabel),
-                      const SizedBox(height: 4),
-                      Text('$_greeting, Admin', style: AppText.pageTitle),
+                      Text(
+                        formatDate(DateTime.now()).toUpperCase(),
+                        style: AppText.monoLabel,
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        _greeting,
+                        style: AppText.pageTitle.copyWith(
+                          fontSize: 35,
+                        ),
+                      ),
                     ],
                   ),
                 ),
