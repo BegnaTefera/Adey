@@ -64,13 +64,25 @@ class ChildrenRepository {
     return rows.map(PaymentRecord.fromMap).toList();
   }
 
+  Future<Map<String, dynamic>> _childRow(
+    DatabaseExecutor db,
+    Child child,
+  ) async {
+    final row = child.toMap();
+    final columns = await db.rawQuery('PRAGMA table_info(children)');
+    if (columns.any((column) => column['name'] == 'medical_notes')) {
+      row['medical_notes'] = child.healthCondition;
+    }
+    return row;
+  }
+
   /// Inserts a brand-new child and all of its nested rows in one
   /// transaction — either everything is saved, or (on error) nothing
   /// is, so a failed registration can't leave a half-written child.
   Future<void> insert(Child child) async {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
-      await txn.insert('children', child.toMap());
+      await txn.insert('children', await _childRow(txn, child));
       for (final g in child.guardians) {
         await txn.insert('guardians', g.toMap(child.id));
       }
@@ -93,7 +105,12 @@ class ChildrenRepository {
   Future<void> update(Child child) async {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
-      await txn.update('children', child.toMap(), where: 'id = ?', whereArgs: [child.id]);
+      await txn.update(
+        'children',
+        await _childRow(txn, child),
+        where: 'id = ?',
+        whereArgs: [child.id],
+      );
 
       await txn.delete('guardians', where: 'child_id = ?', whereArgs: [child.id]);
       for (final g in child.guardians) {

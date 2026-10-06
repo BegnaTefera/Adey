@@ -684,6 +684,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     _signatureStrokes.last.add(details.localPosition);
                   });
                 },
+                onPanEnd: (_) {
+                  if (_signatureStrokes.isEmpty) return;
+                  setState(() => _smoothSignatureStroke(_signatureStrokes.last));
+                },
                 child: Container(
                   height: 180,
                   width: double.infinity,
@@ -711,6 +715,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ],
       ),
     );
+  }
+
+  void _smoothSignatureStroke(List<ui.Offset> stroke) {
+    if (stroke.length < 3) return;
+    final smoothed = List<ui.Offset>.of(stroke);
+    for (var i = 1; i < stroke.length - 1; i++) {
+      final before = stroke[i - 1];
+      final current = stroke[i];
+      final after = stroke[i + 1];
+      smoothed[i] = ui.Offset(
+        (before.dx + current.dx * 2 + after.dx) / 4,
+        (before.dy + current.dy * 2 + after.dy) / 4,
+      );
+    }
+    stroke
+      ..clear()
+      ..addAll(smoothed);
   }
 
   Future<DateTime?> _pickEthiopianDate() async {
