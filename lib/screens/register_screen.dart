@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:ethiopian_datetime/ethiopian_datetime.dart';
 import 'package:image_picker/image_picker.dart';
@@ -926,6 +928,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ---------------------------------------------------------------------
   Future<void> _captureImage({required void Function(String path) onCaptured}) async {
     try {
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        final result = await FilePicker.platform.pickFiles(type: FileType.image);
+        if (result != null && result.files.single.path != null) {
+          setState(() => onCaptured(result.files.single.path!));
+        }
+        return;
+      }
       final picker = ImagePicker();
       final file = await picker.pickImage(
         source: ImageSource.camera,
@@ -938,7 +947,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       showAppFeedback(
         context,
-        message: 'Could not open the camera. Check permission and try again.',
+        message: 'Could not select photo. Check permission and try again.',
         kind: AppFeedbackKind.error,
         actionLabel: 'Retry',
         onAction: () => _captureImage(onCaptured: onCaptured),
@@ -1458,6 +1467,13 @@ class _ImmunizationGalleryDialogState
   Future<void> _addPage() async {
     setState(() => _isAdding = true);
     try {
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        final result = await FilePicker.platform.pickFiles(type: FileType.image);
+        if (result != null && result.files.single.path != null && mounted) {
+          setState(() => _paths.add(result.files.single.path!));
+        }
+        return;
+      }
       final file = await ImagePicker().pickImage(
         source: ImageSource.camera,
         imageQuality: 85,

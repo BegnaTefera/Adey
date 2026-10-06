@@ -1,19 +1,11 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Single SQLite database for the app. Opens (and creates, on first
 /// run) `daycare.db` in the platform's standard app database
 /// directory.
-///
-/// Primary keys are UUID text strings everywhere (not auto-increment
-/// ints), matching the record-identity approach from the sync design:
-/// once the local-network sync layer is built, offline-created records
-/// on mobile and desktop won't collide because ids are never assigned
-/// by either device's own counter.
-///
-/// Schema reset to version 1 — no real installs exist yet, so there's
-/// no onUpgrade migration path. Add one the first time this ships with
-/// real user data to preserve.
 class AppDatabase {
   AppDatabase._internal();
 
@@ -27,6 +19,10 @@ class AppDatabase {
   }
 
   Future<Database> _open() async {
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'daycare.db');
     return openDatabase(
@@ -152,6 +148,17 @@ class AppDatabase {
           CREATE TABLE settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE sync_conflicts (
+            id TEXT PRIMARY KEY,
+            table_name TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            local_json TEXT NOT NULL,
+            remote_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
           )
         ''');
 

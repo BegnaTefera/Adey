@@ -1,9 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
+import 'package:printing/printing.dart';
 import '../data/children_store.dart';
 import '../data/formatters.dart';
+import '../data/registration_pdf.dart';
 import '../models/authorized_pickup.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
@@ -282,6 +285,38 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     }
   }
 
+  Future<void> _printForm(Child child) async {
+    try {
+      final pdfData = RegistrationPdfData(
+        childFirstName: child.firstName,
+        childLastName: child.lastName,
+        gender: child.gender,
+        childDob: child.dob,
+        guardians: child.guardians,
+        healthCondition: child.healthCondition,
+        dietaryNotes: child.dietaryNotes,
+        specialCharacteristics: child.specialCharacteristics,
+        pickupPeople: child.additionalPickupPeople,
+        agreementText: registrationAgreementText,
+        signatureStrokes: const [],
+        signatureAreaSize: const Size(260, 64),
+        signedAt: child.enrolledSince,
+      );
+      final pdfBytes = await buildRegistrationPdf(pdfData);
+      await Printing.layoutPdf(
+        onLayout: (_) => pdfBytes,
+        name: 'Registration_${child.firstName}_${child.lastName}.pdf',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not print form: $e',
+        kind: AppFeedbackKind.error,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final child = _child;
@@ -298,21 +333,32 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.chevron_left,
-                              size: 18, color: AppColors.primary),
-                          Text('Children',
-                              style: AppText.bodyRegular
-                                  .copyWith(color: AppColors.primary)),
-                        ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.chevron_left,
+                                  size: 18, color: AppColors.primary),
+                              Text('Children',
+                                  style: AppText.bodyRegular
+                                      .copyWith(color: AppColors.primary)),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+                        IconButton.outlined(
+                          icon: const Icon(Icons.print_outlined, size: 20),
+                          tooltip: 'Print Registration Form',
+                          onPressed: () => _printForm(child),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Row(

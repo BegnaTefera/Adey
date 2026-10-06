@@ -1,10 +1,15 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'data/children_store.dart';
 import 'data/expenses_store.dart';
 import 'data/fee_types_store.dart';
 import 'data/settings_store.dart';
+import 'data/sync/sync_server.dart';
+import 'data/sync/sync_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/app_shell.dart';
+import 'screens/desktop_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +55,9 @@ class _AppStartupState extends State<_AppStartup> {
       ExpensesStore.instance.init(),
       FeeTypesStore.instance.init(),
       SettingsStore.instance.init(),
+      SyncService.instance.init(),
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+        SyncServer.instance.start(),
     ]);
   }
 
@@ -104,7 +112,8 @@ class _AppStartupState extends State<_AppStartup> {
             ),
           );
         }
-        return const AppShell();
+        final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+        return isDesktop ? const DesktopShell() : const AppShell();
       },
     );
   }
