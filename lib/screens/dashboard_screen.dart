@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../data/children_store.dart';
+import '../data/formatters.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
 import 'attendance_screen.dart';
 import 'billing_screen.dart';
 import 'expenses_screen.dart';
+import 'settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -34,9 +35,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<PaymentRecord> get _overduePayments {
     final result = <PaymentRecord>[];
     for (final child in ChildrenStore.instance.children) {
-      result.addAll(
-        child.payments.where((p) => p.status == PaymentStatus.overdue),
-      );
+      result.addAll(child.payments.where((p) => p.isOverdue));
     }
     return result;
   }
@@ -48,9 +47,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         date.day == now.day;
   }
 
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final today = DateFormat('EEEE, MMMM d').format(DateTime.now());
     final enrolledChildren = ChildrenStore.instance.children
       .where((child) => child.enrollmentStatus == EnrollmentStatus.enrolled)
       .toList();
@@ -60,8 +65,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         (record) => record != null && _isToday(record.date),
         orElse: () => null,
         );
-      return todayRecord?.status == AttendanceStatus.present ||
-        todayRecord?.status == AttendanceStatus.late;
+      return todayRecord?.status == AttendanceStatus.present;
     }).length;
     final attendancePct = enrolledTotal == 0
       ? 0
@@ -75,9 +79,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(today.toUpperCase(), style: AppText.monoLabel),
-            const SizedBox(height: 4),
-            Text('Good morning, Admin', style: AppText.pageTitle),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(formatDate(DateTime.now()).toUpperCase(), style: AppText.monoLabel),
+                      const SizedBox(height: 4),
+                      Text('$_greeting, Admin', style: AppText.pageTitle),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined, color: AppColors.mutedForeground),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -231,13 +253,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               children: [
                                 Text(child.fullName, style: AppText.bodyMedium),
                                 Text(
-                                  '${DateTime.now().difference(overdue[i].date).inDays}d overdue',
+                                  '${DateTime.now().difference(overdue[i].dueDate).inDays}d overdue',
                                   style: AppText.caption,
                                 ),
                               ],
                             ),
                           ),
-                          Text('\$${overdue[i].amount.toStringAsFixed(0)}',
+                          Text(formatEtb(overdue[i].amount),
                               style: AppText.bodyMedium.copyWith(
                                   color: AppColors.danger,
                                   fontFamily:
@@ -257,7 +279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Text('Total outstanding', style: AppText.caption),
                         Text(
-                          '\$${totalOutstanding.toStringAsFixed(0)}',
+                          formatEtb(totalOutstanding),
                           style: AppText.bodyMedium.copyWith(
                               color: AppColors.danger,
                               fontWeight: FontWeight.w600),

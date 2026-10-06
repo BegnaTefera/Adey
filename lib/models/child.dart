@@ -15,9 +15,13 @@ enum DocumentType { id, photo, immunization, registration, other }
 
 enum DocumentStatus { onFile, pending, expired }
 
-enum AttendanceStatus { present, absent, late, excused }
+enum AttendanceStatus { present, absent }
 
-enum PaymentStatus { paid, overdue, pending }
+enum PaymentStatus { pending, paid, cancelled }
+
+/// A pending charge counts as overdue once it's this many days past its
+/// due date without being marked paid.
+const overdueGraceDays = 5;
 
 class Guardian {
   final String id;
@@ -168,34 +172,67 @@ class AttendanceRecord {
 
 class PaymentRecord {
   final String id;
-  final DateTime date;
+  final String feeTypeName;
   final String description;
   final double amount;
   final PaymentStatus status;
+  final DateTime dueDate;
+  final DateTime? paidAt;
+  // e.g. "Meskerem 2018" — which billing cycle this charge is for.
+  // Null for one-off charges (registration fee, a late-pickup fee).
+  final String? cycleLabel;
 
   const PaymentRecord({
     required this.id,
-    required this.date,
+    required this.feeTypeName,
     required this.description,
     required this.amount,
     required this.status,
+    required this.dueDate,
+    this.paidAt,
+    this.cycleLabel,
   });
+
+  /// A pending charge more than [overdueGraceDays] past its due date.
+  /// Not stored — computed at read time so it's never stale.
+  bool get isOverdue =>
+      status == PaymentStatus.pending &&
+      DateTime.now().isAfter(dueDate.add(const Duration(days: overdueGraceDays)));
+
+  PaymentRecord copyWith({PaymentStatus? status, DateTime? paidAt}) {
+    return PaymentRecord(
+      id: id,
+      feeTypeName: feeTypeName,
+      description: description,
+      amount: amount,
+      status: status ?? this.status,
+      dueDate: dueDate,
+      paidAt: paidAt ?? this.paidAt,
+      cycleLabel: cycleLabel,
+    );
+  }
 
   Map<String, dynamic> toMap(String childId) => {
         'id': id,
         'child_id': childId,
-        'date': date.toIso8601String(),
+        'fee_type_name': feeTypeName,
         'description': description,
         'amount': amount,
         'status': status.name,
+        'due_date': dueDate.toIso8601String(),
+        'paid_at': paidAt?.toIso8601String(),
+        'cycle_label': cycleLabel,
       };
 
   factory PaymentRecord.fromMap(Map<String, dynamic> map) => PaymentRecord(
         id: map['id'] as String,
-        date: DateTime.parse(map['date'] as String),
+        feeTypeName: map['fee_type_name'] as String,
         description: map['description'] as String,
         amount: (map['amount'] as num).toDouble(),
         status: PaymentStatus.values.byName(map['status'] as String),
+        dueDate: DateTime.parse(map['due_date'] as String),
+        paidAt: map['paid_at'] == null ? null : DateTime.parse(map['paid_at'] as String),
+        cycleLabel: map['cycle_label'] as String?,
       );
 }
 
@@ -211,6 +248,10 @@ class Child {
   final String specialCharacteristics;
   final EnrollmentStatus enrollmentStatus;
   final DateTime enrolledSince;
+  // Ethiopian-calendar day-of-month tuition is billed on. Null means
+  // "use enrolledSince's Ethiopian day" (the default rule); set to
+  // override it for one child without changing their registration date.
+  final int? billingDayOverride;
   final List<Guardian> guardians;
   final List<ChildDocument> documents;
   final List<AttendanceRecord> attendance;
@@ -230,6 +271,7 @@ class Child {
     this.specialCharacteristics = '',
     required this.enrollmentStatus,
     required this.enrolledSince,
+    this.billingDayOverride,
     required this.guardians,
     required this.documents,
     required this.attendance,
@@ -245,6 +287,7 @@ class Child {
     bool? synced,
     List<AuthorizedPickup>? additionalPickupPeople,
     EnrollmentStatus? enrollmentStatus,
+    int? billingDayOverride,
   }) {
     return Child(
       id: id,
@@ -258,6 +301,7 @@ class Child {
       specialCharacteristics: specialCharacteristics,
       enrollmentStatus: enrollmentStatus ?? this.enrollmentStatus,
       enrolledSince: enrolledSince,
+      billingDayOverride: billingDayOverride ?? this.billingDayOverride,
       guardians: guardians,
       documents: documents ?? this.documents,
       attendance: attendance ?? this.attendance,
@@ -315,6 +359,7 @@ class Child {
         'special_characteristics': specialCharacteristics,
         'enrollment_status': enrollmentStatus.name,
         'enrolled_since': enrolledSince.toIso8601String(),
+        'billing_day_override': billingDayOverride,
         'synced': synced ? 1 : 0,
         'additional_pickup_people': jsonEncode(
           additionalPickupPeople.map((person) => person.toMap()).toList(),
@@ -348,6 +393,7 @@ class Child {
       enrollmentStatus:
           EnrollmentStatus.values.byName(map['enrollment_status'] as String),
       enrolledSince: DateTime.parse(map['enrolled_since'] as String),
+      billingDayOverride: map['billing_day_override'] as int?,
       guardians: guardians,
       documents: documents,
       attendance: attendance,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../data/children_store.dart';
 import '../data/fee_types_store.dart';
+import '../data/formatters.dart';
 import '../data/search_utils.dart';
 import '../models/child.dart';
 import '../models/fee_type.dart';
@@ -39,11 +40,11 @@ class _BillingScreenState extends State<BillingScreen> {
   Widget build(BuildContext context) {
     final feeTypes = FeeTypesStore.instance.feeTypes;
     final children = _showOverdueOnly
-        ? ChildrenStore.instance.children.where((child) => child.payments.any((p) => p.status == PaymentStatus.overdue)).toList()
+        ? ChildrenStore.instance.children.where((child) => child.payments.any((p) => p.isOverdue)).toList()
         : ChildrenStore.instance.children;
 
     final totalOutstanding = children.fold<double>(0, (sum, child) {
-      return sum + child.payments.where((p) => p.status == PaymentStatus.overdue).fold<double>(0, (inner, p) => inner + p.amount);
+      return sum + child.payments.where((p) => p.isOverdue).fold<double>(0, (inner, p) => inner + p.amount);
     });
 
     return Scaffold(
@@ -70,7 +71,7 @@ class _BillingScreenState extends State<BillingScreen> {
               children: [
                 Text('Outstanding', style: AppText.caption),
                 Text(
-                  '\$${totalOutstanding.toStringAsFixed(0)}',
+                  formatEtb(totalOutstanding),
                   style: AppText.pageTitle.copyWith(color: AppColors.danger),
                 ),
               ],
@@ -107,7 +108,7 @@ class _BillingScreenState extends State<BillingScreen> {
                         children: [
                           Text(bracket.label, style: AppText.caption),
                           Text(
-                            '\$${bracket.rate.toStringAsFixed(0)}',
+                            formatEtb(bracket.rate),
                             style: AppText.bodyMedium.copyWith(color: AppColors.primary),
                           ),
                         ],
@@ -125,7 +126,7 @@ class _BillingScreenState extends State<BillingScreen> {
               Switch(
                 value: _showOverdueOnly,
                 onChanged: (value) => setState(() => _showOverdueOnly = value),
-                activeThumbColor: AppColors.primary,
+                activeColor: AppColors.primary,
               ),
             ],
           ),
@@ -160,14 +161,14 @@ class _BillingScreenState extends State<BillingScreen> {
                         child: Text(child.fullName, style: AppText.bodyMedium),
                       ),
                       Text(
-                        '\$${child.payments.where((p) => p.status == PaymentStatus.overdue).fold<double>(0, (sum, p) => sum + p.amount).toStringAsFixed(0)}',
+                        formatEtb(child.payments.where((p) => p.isOverdue).fold<double>(0, (sum, p) => sum + p.amount)),
                         style: AppText.bodyMedium.copyWith(color: AppColors.danger),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   ...child.payments
-                      .where((p) => !_showOverdueOnly || p.status == PaymentStatus.overdue)
+                      .where((p) => !_showOverdueOnly || p.isOverdue)
                       .map(
                         (payment) => Padding(
                           padding: const EdgeInsets.only(top: 6),
@@ -176,9 +177,9 @@ class _BillingScreenState extends State<BillingScreen> {
                             children: [
                               Text(payment.description, style: AppText.caption),
                               Text(
-                                '\$${payment.amount.toStringAsFixed(0)}',
+                                formatEtb(payment.amount),
                                 style: AppText.caption.copyWith(
-                                  color: payment.status == PaymentStatus.overdue ? AppColors.danger : AppColors.primary,
+                                  color: payment.isOverdue ? AppColors.danger : AppColors.primary,
                                 ),
                               ),
                             ],
@@ -204,7 +205,6 @@ class _BillingScreenState extends State<BillingScreen> {
 
     Child selectedChild = allEnrolledChildren.first;
     FeeType selectedFee = feeTypes.first;
-    PaymentStatus selectedStatus = PaymentStatus.pending;
     final amountController = TextEditingController(
       text: selectedFee.rateForAge(selectedChild.ageInMonths).toStringAsFixed(0),
     );
@@ -307,7 +307,7 @@ class _BillingScreenState extends State<BillingScreen> {
                 const SizedBox(height: 12),
                 Text(
                   'Amount — suggested rate for ${selectedChild.ageLabel}: '
-                  '\$${selectedFee.rateForAge(selectedChild.ageInMonths).toStringAsFixed(0)}',
+                  '${formatEtb(selectedFee.rateForAge(selectedChild.ageInMonths))}',
                   style: AppText.caption,
                 ),
                 const SizedBox(height: 6),
@@ -315,23 +315,10 @@ class _BillingScreenState extends State<BillingScreen> {
                   controller: amountController,
                   keyboardType: TextInputType.number,
                 ),
-                const SizedBox(height: 12),
-                Text('Status', style: AppText.caption),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  children: PaymentStatus.values.map((status) {
-                    final selected = selectedStatus == status;
-                    return ChoiceChip(
-                      label: Text(status.name),
-                      selected: selected,
-                      onSelected: (_) => setSheetState(() => selectedStatus = status),
-                      selectedColor: AppColors.primary,
-                      labelStyle: TextStyle(
-                        color: selected ? Colors.white : AppColors.foreground,
-                      ),
-                    );
-                  }).toList(),
+                const SizedBox(height: 4),
+                Text(
+                  'This records a payment that has already come in and marks it paid.',
+                  style: AppText.caption,
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -341,12 +328,15 @@ class _BillingScreenState extends State<BillingScreen> {
                       final amount = double.tryParse(amountController.text) ?? 0;
                       if (amount <= 0 || descriptionController.text.trim().isEmpty) return;
 
+                      final now = DateTime.now();
                       final payment = PaymentRecord(
                         id: const Uuid().v4(),
-                        date: DateTime.now(),
+                        feeTypeName: selectedFee.name,
                         description: descriptionController.text.trim(),
                         amount: amount,
-                        status: selectedStatus,
+                        status: PaymentStatus.paid,
+                        dueDate: now,
+                        paidAt: now,
                       );
 
                       await ChildrenStore.instance.updateChild(

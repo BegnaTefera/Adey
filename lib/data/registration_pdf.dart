@@ -6,24 +6,9 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'formatters.dart';
 import '../models/authorized_pickup.dart';
 import '../models/child.dart';
-
-const _amharicMonths = [
-  'መስከረም',
-  'ጥቅምት',
-  'ኅዳር',
-  'ታኅሳስ',
-  'ጥር',
-  'የካቲት',
-  'መጋቢት',
-  'ሚያዝያ',
-  'ግንቦት',
-  'ሰኔ',
-  'ሐምሌ',
-  'ነሐሴ',
-  'ጳጉሜ',
-];
 
 /// Amharic translation for each relationship option offered at
 /// registration, used to label each guardian's section on the printed
@@ -44,7 +29,7 @@ String _amharicRelationship(String relationship) =>
 
 String _ethiopianDateString(DateTime date) {
   final et = date.convertToEthiopian();
-  return '${et.day} ${_amharicMonths[et.month - 1]} ${et.year}';
+  return '${et.day} ${amharicMonths[et.month - 1]} ${et.year}';
 }
 
 /// Everything needed to render the registration form + signature as a
@@ -125,187 +110,179 @@ Future<Uint8List> buildRegistrationPdf(RegistrationPdfData data) async {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Center(
-                child: pw.Text(
-                  'አደይ አበባ የህፃናት ማቆያ',
-                  style: const pw.TextStyle(fontSize: 22),
-                ),
+        pw.Center(
+          child: pw.Text(
+            'አደይ አበባ የህፃናት ማቆያ',
+            style: const pw.TextStyle(fontSize: 22),
+          ),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Center(
+          child: pw.Text(
+            'የመመዝገቢያ ፎርም',
+            style: const pw.TextStyle(fontSize: 16),
+          ),
+        ),
+        pw.SizedBox(height: 18),
+
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              flex: 3,
+              child: _field(
+                '1. የህፃኑ/ኗ ሙሉ ስም',
+                '${data.childFirstName} ${data.childLastName}',
               ),
-              pw.SizedBox(height: 6),
-              pw.Center(
-                child: pw.Text(
-                  'የመመዝገቢያ ፎርም',
-                  style: const pw.TextStyle(
-                    fontSize: 16,
-                  ),
-                ),
+            ),
+            pw.SizedBox(width: 12),
+            pw.Expanded(
+              flex: 2,
+              child: _field('ፆታ፡', data.gender.amharicLabel),
+            ),
+          ],
+        ),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              flex: 4,
+              child: _field('2. የትውልድ ቀን፡', '${childDobEthiopian.day}'),
+            ),
+            pw.Expanded(
+              flex: 3,
+              child: _field(
+                'ወር፡',
+                amharicMonths[childDobEthiopian.month - 1],
               ),
-              pw.SizedBox(height: 18),
+            ),
+            pw.Expanded(
+              flex: 2,
+              child: _field('ዓ.ም፡', '${childDobEthiopian.year}'),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 6),
 
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Expanded(
-                    flex: 3,
-                    child: _field(
-                      '1. የህፃኑ/ኗ ሙሉ ስም',
-                      '${data.childFirstName}'+ ' ' + '${data.childLastName}',
-                    ),
-                  ),
-                  pw.SizedBox(width: 12),
-                  pw.Expanded(
-                    flex: 2,
-                    child: _field('ፆታ፡', data.gender.amharicLabel),
-                  ),
-                ],
-              ),
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Expanded(
-                    flex: 4,
-                    child: _field('2. የትውልድ ቀን፡', '${childDobEthiopian.day}'),
-                  ),
-                  pw.Expanded(
-                    flex: 3,
-                    child: _field(
-                      'ወር፡',
-                      _amharicMonths[childDobEthiopian.month - 1],
-                    ),
-                  ),
-                  pw.Expanded(
-                    flex: 2,
-                    child: _field('ዓ.ም፡', '${childDobEthiopian.year}'),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 6),
+        // One numbered section per guardian, mirroring the form's
+        // separate mother/father blocks — generalized to whatever
+        // relationship was actually recorded (mother, father,
+        // grandparent, etc.) rather than assuming exactly those two.
+        for (var i = 0; i < data.guardians.length; i++) ...[
+          _guardianSection(i + 3, data.guardians[i]),
+          pw.SizedBox(height: 6),
+        ],
 
-              // One numbered section per guardian, mirroring the form's
-              // separate mother/father blocks — generalized to whatever
-              // relationship was actually recorded (mother, father,
-              // grandparent, etc.) rather than assuming exactly those two.
-              for (var i = 0; i < data.guardians.length; i++) ...[
-                _guardianSection(i + 3, data.guardians[i]),
-                pw.SizedBox(height: 6),
-              ],
+        pw.SizedBox(height: 6),
+        pw.Text(
+          '5. ህጻኑን/ኗን የሚረከብ እና የሚያስረክብ ሰው ስም እና ስልክ ቁጥር',
+          style: const pw.TextStyle(fontSize: 16),
+        ),
+        pw.SizedBox(height: 2),
+        for (var i = 0;
+            i < (data.pickupPeople.length < 2 ? 2 : data.pickupPeople.length);
+            i++)
+          _pickupLine(
+            '5.${i + 1}',
+            i < data.pickupPeople.length ? data.pickupPeople[i].name : '',
+            i < data.pickupPeople.length ? data.pickupPeople[i].phone : '',
+          ),
+        pw.SizedBox(height: 6),
 
-              pw.SizedBox(height: 6),
-              pw.Text(
-                '5. ህጻኑን/ኗን የሚረከብ እና የሚያስረክብ ሰው ስም እና ስልክ ቁጥር',
-                style: const pw.TextStyle(fontSize: 16),
-              ),
-              pw.SizedBox(height: 2),
-              for (var i = 0;
-                  i <
-                      (data.pickupPeople.length < 2
-                          ? 2
-                          : data.pickupPeople.length);
-                  i++)
-                _pickupLine(
-                  '5.${i + 1}',
-                  i < data.pickupPeople.length ? data.pickupPeople[i].name : '',
-                  i < data.pickupPeople.length
-                      ? data.pickupPeople[i].phone
-                      : '',
-                ),
-              pw.SizedBox(height: 6),
+        _field('6. የህጻኑ/ኗ የጤና ሁኔታ',
+            data.healthCondition.isEmpty ? '—' : data.healthCondition),
+        _field('7. የህጻኑ/ኗ የአመጋገብ ሁኔታ',
+            data.dietaryNotes.isEmpty ? '—' : data.dietaryNotes),
+        _field('8. የህጻኑ/ኗ ልዩ ባህሪ',
+            data.specialCharacteristics.isEmpty
+                ? '—'
+                : data.specialCharacteristics),
+        pw.SizedBox(height: 10),
 
-              _field('6. የህጻኑ/ኗ የጤና ሁኔታ',
-                  data.healthCondition.isEmpty ? '—' : data.healthCondition),
-              _field('7. የህጻኑ/ኗ የአመጋገብ ሁኔታ',
-                  data.dietaryNotes.isEmpty ? '—' : data.dietaryNotes),
-              _field(
-                  '8. የህጻኑ/ኗ ልዩ ባህሪ',
-                  data.specialCharacteristics.isEmpty
-                      ? '—'
-                      : data.specialCharacteristics),
-              pw.SizedBox(height: 10),
+        pw.Text(
+          'እኔ${primaryGuardian != null ? ' ${primaryGuardian.name}' : ''} '
+          'በአደይ አበባ የህፃናት ማቆያ ስላስገባሁት/ኋት ህፃን በሚመለከት በማቆያው ደንብ መሰረት '
+          'በማንኛውም ጉዳይ ሁሉ አስፈላጊውን ትብብር ለማድረግ የውዴታ ግዴታ የገባሁ መሆኔን '
+          'በፊርማዬ አረጋግጣለሁ።',
+          textAlign: pw.TextAlign.justify,
+          style: const pw.TextStyle(fontSize: 14),
+        ),
+        pw.SizedBox(height: 14),
 
-              pw.Text(
-                'እኔ${primaryGuardian != null ? ' ${primaryGuardian.name}' : ''} '
-                'በአደይ አበባ የህፃናት ማቆያ ስላስገባሁት/ኋት ህፃን በሚመለከት በማቆያው ደንብ መሰረት '
-                'በማንኛውም ጉዳይ ሁሉ አስፈላጊውን ትብብር ለማድረግ የውዴታ ግዴታ የገባሁ መሆኔን '
-                'በፊርማዬ አረጋግጣለሁ።',
-                textAlign: pw.TextAlign.justify,
-                style: const pw.TextStyle(fontSize: 14),
-              ),
-              pw.SizedBox(height: 14),
+        pw.Text(
+          'ወላጅ',
+          style: const pw.TextStyle(fontSize: 14),
+        ),
+        pw.SizedBox(height: 4),
+        _field('ስም', primaryGuardian?.name ?? '', fontSize: 14),
+        pw.SizedBox(height: 4),
 
-              pw.Text(
-                'ወላጅ',
-                style: const pw.TextStyle(fontSize: 14),
-              ),
-              pw.SizedBox(height: 4),
-              _field('ስም', primaryGuardian?.name ?? '', fontSize: 14),
-              pw.SizedBox(height: 4),
+        pw.Text('ፊርማ', style: const pw.TextStyle(fontSize: 14)),
+        pw.SizedBox(height: 4),
+        pw.Container(
+          width: signatureBoxWidth,
+          height: signatureBoxHeight,
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey400),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.CustomPaint(
+            size: const PdfPoint(signatureBoxWidth, signatureBoxHeight),
+            painter: (PdfGraphics canvas, PdfPoint size) {
+              canvas.setColor(PdfColors.black);
+              canvas.setLineWidth(1.2);
 
-              pw.Text('ፊርማ', style: const pw.TextStyle(fontSize: 14)),
-              pw.SizedBox(height: 4),
-              pw.Container(
-                width: signatureBoxWidth,
-                height: signatureBoxHeight,
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey400),
-                  borderRadius: pw.BorderRadius.circular(4),
-                ),
-                child: pw.CustomPaint(
-                  size: const PdfPoint(signatureBoxWidth, signatureBoxHeight),
-                  painter: (PdfGraphics canvas, PdfPoint size) {
-                    canvas.setColor(PdfColors.black);
-                    canvas.setLineWidth(1.2);
+              // Flip Y (Flutter's canvas origin is top-left, PDF's is
+              // bottom-left) and scale from the on-screen pad size into
+              // the PDF's signature box.
+              PdfPoint transform(ui.Offset p) => PdfPoint(
+                    p.dx * scaleX,
+                    size.y - (p.dy * scaleY),
+                  );
 
-                    // Flip Y (Flutter's canvas origin is top-left, PDF's is
-                    // bottom-left) and scale from the on-screen pad size into
-                    // the PDF's signature box.
-                    PdfPoint transform(ui.Offset p) => PdfPoint(
-                          p.dx * scaleX,
-                          size.y - (p.dy * scaleY),
-                        );
-
-                    for (final stroke in data.signatureStrokes) {
-                      if (stroke.isEmpty) continue;
-                      if (stroke.length < 3) {
-                        final first = transform(stroke.first);
-                        canvas.moveTo(first.x, first.y);
-                        for (final point in stroke.skip(1)) {
-                          final p = transform(point);
-                          canvas.lineTo(p.x, p.y);
-                        }
-                        continue;
-                      }
-                      // Same smoothing as the live signature pad: each raw
-                      // point becomes the control point of a curve ending at
-                      // the midpoint to the next point, converted to the
-                      // equivalent cubic Bezier since PdfGraphics only
-                      // exposes curveTo (cubic).
-                      var previous = transform(stroke[0]);
-                      canvas.moveTo(previous.x, previous.y);
-                      for (var i = 1; i < stroke.length - 1; i++) {
-                        final control = transform(stroke[i]);
-                        final next = transform(stroke[i + 1]);
-                        final end = PdfPoint(
-                          (control.x + next.x) / 2,
-                          (control.y + next.y) / 2,
-                        );
-                        final c1 = PdfPoint(
-                          previous.x + (control.x - previous.x) * 2 / 3,
-                          previous.y + (control.y - previous.y) * 2 / 3,
-                        );
-                        final c2 = PdfPoint(
-                          end.x + (control.x - end.x) * 2 / 3,
-                          end.y + (control.y - end.y) * 2 / 3,
-                        );
-                        canvas.curveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
-                        previous = end;
-                      }
-                      final last = transform(stroke.last);
-                      canvas.lineTo(last.x, last.y);
-                    }
-                    canvas.strokePath();
-                  },
-                ),
-              ),
+              for (final stroke in data.signatureStrokes) {
+                if (stroke.isEmpty) continue;
+                if (stroke.length < 3) {
+                  final first = transform(stroke.first);
+                  canvas.moveTo(first.x, first.y);
+                  for (final point in stroke.skip(1)) {
+                    final p = transform(point);
+                    canvas.lineTo(p.x, p.y);
+                  }
+                  continue;
+                }
+                // Same smoothing as the live signature pad: each raw
+                // point becomes the control point of a curve ending at
+                // the midpoint to the next point, converted to the
+                // equivalent cubic Bezier since PdfGraphics only
+                // exposes curveTo (cubic).
+                var previous = transform(stroke[0]);
+                canvas.moveTo(previous.x, previous.y);
+                for (var i = 1; i < stroke.length - 1; i++) {
+                  final control = transform(stroke[i]);
+                  final next = transform(stroke[i + 1]);
+                  final end = PdfPoint(
+                    (control.x + next.x) / 2,
+                    (control.y + next.y) / 2,
+                  );
+                  final c1 = PdfPoint(
+                    previous.x + (control.x - previous.x) * 2 / 3,
+                    previous.y + (control.y - previous.y) * 2 / 3,
+                  );
+                  final c2 = PdfPoint(
+                    end.x + (control.x - end.x) * 2 / 3,
+                    end.y + (control.y - end.y) * 2 / 3,
+                  );
+                  canvas.curveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
+                  previous = end;
+                }
+                final last = transform(stroke.last);
+                canvas.lineTo(last.x, last.y);
+              }
+              canvas.strokePath();
+            },
+          ),
+        ),
               pw.SizedBox(height: 6),
               _field('ቀን', _ethiopianDateString(data.signedAt), fontSize: 14),
             ],
@@ -355,17 +332,11 @@ pw.Widget _guardianSection(int fieldNumber, Guardian guardian) {
           ),
           pw.Expanded(
             flex: 2,
-            child: _field(
-              'ወረዳ፡',
-              guardian.woreda,
-            ),
+            child: _field('ወረዳ፡', guardian.woreda),
           ),
           pw.Expanded(
             flex: 2,
-            child: _field(
-              'ቤት ቁጥር፡',
-              guardian.houseNumber,
-            ),
+            child: _field('ቤት ቁጥር፡', guardian.houseNumber),
           ),
         ],
       ),

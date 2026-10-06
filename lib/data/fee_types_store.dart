@@ -14,23 +14,29 @@ class FeeTypesStore extends ChangeNotifier {
 
   Future<void> init() async {
     if (_initialized) return;
+    await refresh();
+    _initialized = true;
+  }
 
+  Future<void> refresh() async {
     final db = await AppDatabase.instance.database;
     final feeRows = await db.query('fee_types', orderBy: 'name ASC');
     final rateRows = await db.query('fee_rates', orderBy: 'min_months ASC');
 
     _feeTypes = feeRows.map((feeRow) {
-      final name = feeRow['name'] as String;
+      final id = feeRow['id'] as String;
       final rates = rateRows
-          .where((rate) => rate['fee_type_name'] == name)
+          .where((rate) => rate['fee_type_id'] == id)
           .map(AgeBracket.fromMap)
           .toList();
       return FeeType(
-        name: name,
+        id: id,
+        name: feeRow['name'] as String,
         recurring: feeRow['recurring'] == 1,
+        chargeOnRegistration: feeRow['charge_on_registration'] == 1,
         rates: rates,
       );
     }).toList();
-    _initialized = true;
+    notifyListeners();
   }
 }

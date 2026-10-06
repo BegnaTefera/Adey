@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../data/children_store.dart';
 import '../data/document_storage.dart';
+import '../data/formatters.dart';
 import '../data/registration_pdf.dart';
 import '../models/child.dart';
 import '../models/authorized_pickup.dart';
@@ -21,22 +22,6 @@ const _agreementText =
     'signature confirms enrollment only — any future changes to '
     'contact, medical, or pickup information are updated separately in '
     'the child\'s record and do not require a new signature.';
-
-const _ethiopianMonths = [
-  'Meskerem',
-  'Tikimt',
-  'Hidar',
-  'Tahsas',
-  'Tir',
-  'Yekatit',
-  'Megabit',
-  'Miyazya',
-  'Ginbot',
-  'Sene',
-  'Hamle',
-  'Nehase',
-  'Pagume',
-];
 
 const _guardianRelationships = [
   'Mother',
@@ -753,8 +738,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _ethiopianDateLabel(DateTime date) {
     final etDate = date.convertToEthiopian();
-    return '${_ethiopianMonths[etDate.month - 1]} ${etDate.day}, '
-        '${etDate.year} E.C.  (${DateFormat('MMM d, yyyy').format(date)})';
+    return '${etDate.day} ${amharicMonths[etDate.month - 1]} '
+        '${etDate.year} (${DateFormat('MMM d, yyyy').format(date)})';
   }
 
   // ---------------------------------------------------------------------
@@ -1172,7 +1157,7 @@ class _EthiopianDatePickerDialogState
                 ),
                 Expanded(
                   child: Text(
-                    '${_ethiopianMonths[_month - 1]} $_year',
+                    '${amharicMonths[_month - 1]} $_year',
                     textAlign: TextAlign.center,
                     style: AppText.bodyMedium,
                   ),

@@ -3,14 +3,17 @@ import 'package:sqflite/sqflite.dart';
 
 /// Single SQLite database for the app. Opens (and creates, on first
 /// run) `daycare.db` in the platform's standard app database
-/// directory. Real local storage — this is what [ChildrenStore] and
-/// [ExpensesStore] read from and write to instead of an in-memory list.
+/// directory.
 ///
 /// Primary keys are UUID text strings everywhere (not auto-increment
 /// ints), matching the record-identity approach from the sync design:
 /// once the local-network sync layer is built, offline-created records
 /// on mobile and desktop won't collide because ids are never assigned
 /// by either device's own counter.
+///
+/// Schema reset to version 1 — no real installs exist yet, so there's
+/// no onUpgrade migration path. Add one the first time this ships with
+/// real user data to preserve.
 class AppDatabase {
   AppDatabase._internal();
 
@@ -28,7 +31,7 @@ class AppDatabase {
     final path = join(dbPath, 'daycare.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 1,
       onConfigure: (db) async {
         // sqflite doesn't enforce foreign keys by default — needed for
         // ON DELETE CASCADE to actually clean up a child's guardians,
@@ -49,6 +52,7 @@ class AppDatabase {
             special_characteristics TEXT NOT NULL DEFAULT '',
             enrollment_status TEXT NOT NULL,
             enrolled_since TEXT NOT NULL,
+            billing_day_override INTEGER,
             synced INTEGER NOT NULL,
             additional_pickup_people TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -102,10 +106,13 @@ class AppDatabase {
           CREATE TABLE payments (
             id TEXT PRIMARY KEY,
             child_id TEXT NOT NULL,
-            date TEXT NOT NULL,
+            fee_type_name TEXT NOT NULL,
             description TEXT NOT NULL,
             amount REAL NOT NULL,
             status TEXT NOT NULL,
+            due_date TEXT NOT NULL,
+            paid_at TEXT,
+            cycle_label TEXT,
             FOREIGN KEY (child_id) REFERENCES children (id) ON DELETE CASCADE
           )
         ''');
@@ -120,77 +127,71 @@ class AppDatabase {
           )
         ''');
 
-        await _createFeeTables(db);
-        await _insertDefaultFeeTypes(db);
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await _createFeeTables(db);
-          await _insertDefaultFeeTypes(db);
-        }
-        if (oldVersion < 3) {
-          await db.execute("ALTER TABLE children ADD COLUMN gender TEXT NOT NULL DEFAULT 'male'");
-          await db.execute("ALTER TABLE children ADD COLUMN health_condition TEXT NOT NULL DEFAULT ''");
-          await db.execute("ALTER TABLE children ADD COLUMN dietary_notes TEXT NOT NULL DEFAULT ''");
-          await db.execute("ALTER TABLE children ADD COLUMN special_characteristics TEXT NOT NULL DEFAULT ''");
-          // Best-effort carry-over: the old single "medical_notes" field
-          // becomes the starting point for the new health_condition
-          // field, since that's the closest match of the three new ones.
-          await db.execute(
-            "UPDATE children SET health_condition = medical_notes WHERE medical_notes IS NOT NULL AND medical_notes != ''",
-          );
+        await db.execute('''
+          CREATE TABLE fee_types (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            recurring INTEGER NOT NULL,
+            charge_on_registration INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
 
-          await db.execute("ALTER TABLE guardians ADD COLUMN sub_city TEXT NOT NULL DEFAULT ''");
-          await db.execute("ALTER TABLE guardians ADD COLUMN woreda TEXT NOT NULL DEFAULT ''");
-          await db.execute("ALTER TABLE guardians ADD COLUMN house_number TEXT NOT NULL DEFAULT ''");
-        }
+        await db.execute('''
+          CREATE TABLE fee_rates (
+            id TEXT PRIMARY KEY,
+            fee_type_id TEXT NOT NULL,
+            label TEXT NOT NULL,
+            min_months INTEGER NOT NULL,
+            max_months INTEGER,
+            rate REAL NOT NULL,
+            FOREIGN KEY (fee_type_id) REFERENCES fee_types (id) ON DELETE CASCADE
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          )
+        ''');
+
+        await _insertDefaultFeeTypes(db);
       },
     );
   }
 
-  Future<void> _createFeeTables(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS fee_types (
-        name TEXT PRIMARY KEY,
-        recurring INTEGER NOT NULL
-      )
-    ''');
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS fee_rates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fee_type_name TEXT NOT NULL,
-        label TEXT NOT NULL,
-        min_months INTEGER NOT NULL,
-        max_months INTEGER,
-        rate REAL NOT NULL,
-        FOREIGN KEY (fee_type_name) REFERENCES fee_types (name)
-          ON DELETE CASCADE
-      )
-    ''');
-  }
+  Future<void> _insertDefaultFeeTypes(DatabaseExecutor db) async {
+    const tuitionId = 'seed-fee-tuition';
+    const registrationId = 'seed-fee-registration';
+    const latePickupId = 'seed-fee-late-pickup';
 
-  Future<void> _insertDefaultFeeTypes(Database db) async {
-    final count = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM fee_types'),
-        ) ??
-        0;
-    if (count != 0) return;
+    await db.insert('fee_types', {
+      'id': tuitionId,
+      'name': 'Tuition',
+      'recurring': 1,
+      'charge_on_registration': 0,
+    });
+    await db.insert('fee_types', {
+      'id': registrationId,
+      'name': 'Registration fee',
+      'recurring': 0,
+      'charge_on_registration': 1,
+    });
+    await db.insert('fee_types', {
+      'id': latePickupId,
+      'name': 'Late pickup',
+      'recurring': 0,
+      'charge_on_registration': 0,
+    });
 
-    final defaults = <Map<String, Object?>>[
-      {'name': 'Tuition', 'recurring': 1},
-      {'name': 'Late pickup', 'recurring': 0},
-      {'name': 'Field trip', 'recurring': 0},
-    ];
-    for (final fee in defaults) {
-      await db.insert('fee_types', fee);
-    }
-
+    // Placeholder rates — meant to be edited to the daycare's real
+    // pricing via the fee editor once it's built.
     final rates = <Map<String, Object?>>[
-      {'fee_type_name': 'Tuition', 'label': 'Infant (0-11mo)', 'min_months': 0, 'max_months': 11, 'rate': 610},
-      {'fee_type_name': 'Tuition', 'label': 'Toddler (12-35mo)', 'min_months': 12, 'max_months': 35, 'rate': 540},
-      {'fee_type_name': 'Tuition', 'label': 'Preschool (36mo+)', 'min_months': 36, 'max_months': null, 'rate': 460},
-      {'fee_type_name': 'Late pickup', 'label': 'Flat rate', 'min_months': 0, 'max_months': null, 'rate': 255},
-      {'fee_type_name': 'Field trip', 'label': 'Flat rate', 'min_months': 0, 'max_months': null, 'rate': 120},
+      {'id': 'seed-rate-1', 'fee_type_id': tuitionId, 'label': 'Infant (0-11mo)', 'min_months': 0, 'max_months': 11, 'rate': 610},
+      {'id': 'seed-rate-2', 'fee_type_id': tuitionId, 'label': 'Toddler (12-35mo)', 'min_months': 12, 'max_months': 35, 'rate': 540},
+      {'id': 'seed-rate-3', 'fee_type_id': tuitionId, 'label': 'Preschool (36mo+)', 'min_months': 36, 'max_months': null, 'rate': 460},
+      {'id': 'seed-rate-4', 'fee_type_id': registrationId, 'label': 'Flat rate', 'min_months': 0, 'max_months': null, 'rate': 300},
+      {'id': 'seed-rate-5', 'fee_type_id': latePickupId, 'label': 'Flat rate', 'min_months': 0, 'max_months': null, 'rate': 255},
     ];
     for (final rate in rates) {
       await db.insert('fee_rates', rate);

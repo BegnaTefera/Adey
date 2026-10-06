@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'data/children_store.dart';
 import 'data/expenses_store.dart';
 import 'data/fee_types_store.dart';
+import 'data/settings_store.dart';
 import 'theme/app_theme.dart';
 import 'screens/app_shell.dart';
 
@@ -44,6 +45,7 @@ class _AppStartupState extends State<_AppStartup> {
       ChildrenStore.instance.init(),
       ExpensesStore.instance.init(),
       FeeTypesStore.instance.init(),
+      SettingsStore.instance.init(),
     ]);
   }
 

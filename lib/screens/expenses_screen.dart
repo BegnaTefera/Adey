@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../data/expenses_store.dart';
+import '../data/formatters.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
 
@@ -31,7 +32,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     final expenses = ExpensesStore.instance.expenses;
-    final total = expenses.fold<double>(0, (sum, item) => sum + item.amount);
+    final now = DateTime.now();
+    final thisMonthTotal = expenses
+        .where((e) => e.date.year == now.year && e.date.month == now.month)
+        .fold<double>(0, (sum, item) => sum + item.amount);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -54,9 +58,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Monthly total', style: AppText.caption),
+                Text('This month', style: AppText.caption),
                 Text(
-                  '\$${total.toStringAsFixed(0)}',
+                  formatEtb(thisMonthTotal),
                   style: AppText.pageTitle.copyWith(color: AppColors.primary),
                 ),
               ],
@@ -93,7 +97,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       children: [
                         Text(expense.category, style: AppText.bodyMedium),
                         const SizedBox(height: 4),
-                        Text(expense.date, style: AppText.caption),
+                        Text(formatDate(expense.date), style: AppText.caption),
                         if (expense.note.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(expense.note, style: AppText.caption),
@@ -102,7 +106,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     ),
                   ),
                   Text(
-                    '\$${expense.amount.toStringAsFixed(0)}',
+                    formatEtb(expense.amount),
                     style: AppText.bodyMedium.copyWith(color: AppColors.foreground),
                   ),
                 ],
@@ -142,7 +146,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             TextField(
               controller: amountController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Amount'),
+              decoration: const InputDecoration(labelText: 'Amount (ETB)'),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -161,7 +165,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       id: const Uuid().v4(),
                       category: categoryController.text.trim(),
                       amount: amount,
-                      date: DateTime.now().toIso8601String().split('T').first,
+                      date: DateTime.now(),
                       note: noteController.text.trim(),
                     ),
                   );

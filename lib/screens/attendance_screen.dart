@@ -29,6 +29,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (mounted) setState(() {});
   }
 
+  AttendanceRecord? _todayRecord(Child child) {
+    final now = DateTime.now();
+    for (final record in child.attendance) {
+      if (record.date.year == now.year &&
+          record.date.month == now.month &&
+          record.date.day == now.day) {
+        return record;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final children = ChildrenStore.instance.children
@@ -48,15 +60,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final child = children[index];
-            final now = DateTime.now();
-            final todayRecord = child.attendance.cast<AttendanceRecord?>().firstWhere(
-              (record) =>
-                record != null &&
-                record.date.year == now.year &&
-                record.date.month == now.month &&
-                record.date.day == now.day,
-              orElse: () => null,
-              );
+          final todayRecord = _todayRecord(child);
+          final present = todayRecord?.status == AttendanceStatus.present;
 
           return Container(
             padding: const EdgeInsets.all(16),
@@ -68,10 +73,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   backgroundColor: AppColors.primary,
                   child: Text(
                     child.initials,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -81,30 +83,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     children: [
                       Text(child.fullName, style: AppText.bodyMedium),
                       const SizedBox(height: 4),
-                      Text(
-                        child.ageLabel,
-                        style: AppText.caption,
-                      ),
+                      Text(child.ageLabel, style: AppText.caption),
                     ],
                   ),
                 ),
-                Column(
-                  children: [
-                    _StatusPill(status: todayRecord?.status ?? AttendanceStatus.absent),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => _markChild(child, AttendanceStatus.present),
-                          child: const Text('In'),
-                        ),
-                        TextButton(
-                          onPressed: () => _markChild(child, AttendanceStatus.late),
-                          child: const Text('Late'),
-                        ),
-                      ],
-                    ),
-                  ],
+                Switch(
+                  value: present,
+                  onChanged: (value) => _markChild(
+                    child,
+                    value ? AttendanceStatus.present : AttendanceStatus.absent,
+                  ),
+                  activeColor: AppColors.primary,
                 ),
               ],
             ),
@@ -116,54 +105,31 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _markChild(Child child, AttendanceStatus status) async {
     final today = DateTime.now();
+    final existing = _todayRecord(child);
+
     final record = AttendanceRecord(
-      id: const Uuid().v4(),
+      id: existing?.id ?? const Uuid().v4(),
       date: today,
-        checkIn: status == AttendanceStatus.absent
-          ? null
-          : DateFormat('HH:mm').format(today),
-      checkOut: null,
+      checkIn: status == AttendanceStatus.present
+          ? (existing?.checkIn ?? DateFormat('HH:mm').format(today))
+          : null,
+      checkOut: existing?.checkOut,
       status: status,
     );
 
-    final updatedAttendance =
-        List<AttendanceRecord>.from(child.attendance)..insert(0, record);
+    // Update today's record in place if one exists, instead of always
+    // inserting — otherwise toggling twice in one day leaves two rows
+    // for the same date.
+    final updatedAttendance = List<AttendanceRecord>.from(child.attendance);
+    final existingIndex = existing == null ? -1 : updatedAttendance.indexWhere((r) => r.id == existing.id);
+    if (existingIndex >= 0) {
+      updatedAttendance[existingIndex] = record;
+    } else {
+      updatedAttendance.insert(0, record);
+    }
 
     await ChildrenStore.instance.updateChild(
       child.copyWith(attendance: updatedAttendance),
-    );
-    // No local setState needed — the store's notifyListeners triggers
-    // _onStoreChanged, which rebuilds this screen from the live list.
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  final AttendanceStatus status;
-
-  const _StatusPill({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final info = switch (status) {
-      AttendanceStatus.present => (AppColors.syncSoft, AppColors.sync, 'Present'),
-      AttendanceStatus.absent => (AppColors.dangerSoft, AppColors.danger, 'Absent'),
-      AttendanceStatus.late => (AppColors.pendingSoft, AppColors.pendingTextDark, 'Late'),
-      AttendanceStatus.excused => (AppColors.muted, AppColors.mutedForeground, 'Excused'),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: info.$1,
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: Text(
-        info.$3,
-        style: AppText.monoCaption.copyWith(
-          color: info.$2,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
     );
   }
 }

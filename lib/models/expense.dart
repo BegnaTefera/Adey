@@ -2,7 +2,7 @@ class ExpenseItem {
   final String id;
   final String category;
   final double amount;
-  final String date;
+  final DateTime date;
   final String note;
 
   const ExpenseItem({
@@ -17,7 +17,7 @@ class ExpenseItem {
         'id': id,
         'category': category,
         'amount': amount,
-        'date': date,
+        'date': date.toIso8601String(),
         'note': note,
       };
 
@@ -25,7 +25,7 @@ class ExpenseItem {
         id: map['id'] as String,
         category: map['category'] as String,
         amount: (map['amount'] as num).toDouble(),
-        date: map['date'] as String,
+        date: DateTime.parse(map['date'] as String),
         note: map['note'] as String,
       );
 }

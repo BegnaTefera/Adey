@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import '../data/children_store.dart';
+import '../data/formatters.dart';
 import '../models/authorized_pickup.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
@@ -295,11 +295,9 @@ class _InfoTab extends StatelessWidget {
               ),
               _Row('Full name', child.fullName),
               _Row('Gender', child.gender == Gender.male ? 'Male' : 'Female'),
-              _Row('Date of birth',
-                  DateFormat('MMM d, yyyy').format(child.dob)),
+              _Row('Date of birth', formatDate(child.dob)),
               _Row('Age', child.ageLabel),
-              _Row('Enrolled since',
-                  DateFormat('MMMM d, yyyy').format(child.enrolledSince),
+              _Row('Enrolled since', formatDate(child.enrolledSince),
                   isLast: true),
             ],
           ),
@@ -629,7 +627,7 @@ class _DocumentsTab extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(doc.label, style: AppText.bodyMedium),
-                        Text(DateFormat('MMM d, yyyy').format(doc.uploadedAt),
+                        Text(formatDate(doc.uploadedAt),
                             style: AppText.caption),
                       ],
                     ),
@@ -695,8 +693,6 @@ class _AttendanceTab extends StatelessWidget {
   (Color, String) _statusInfo(AttendanceStatus s) => switch (s) {
         AttendanceStatus.present => (AppColors.sync, 'Present'),
         AttendanceStatus.absent => (AppColors.danger, 'Absent'),
-        AttendanceStatus.late => (AppColors.accent, 'Late'),
-        AttendanceStatus.excused => (AppColors.mutedForeground, 'Excused'),
       };
 
   @override
@@ -736,7 +732,7 @@ class _AttendanceTab extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(DateFormat('EEE, MMM d').format(record.date),
+                      Text(formatDateShort(record.date),
                           style: AppText.bodyMedium),
                       if (record.checkIn != null)
                         Text(
@@ -762,12 +758,18 @@ class _PaymentsTab extends StatelessWidget {
   final Child child;
   const _PaymentsTab({required this.child});
 
-  (Color, Color) _statusColors(PaymentStatus s) => switch (s) {
-        PaymentStatus.paid => (AppColors.syncSoft, AppColors.sync),
-        PaymentStatus.overdue => (AppColors.dangerSoft, AppColors.danger),
-        PaymentStatus.pending =>
-          (AppColors.pendingSoft, AppColors.pendingTextDark),
-      };
+  (Color, Color, String) _statusDisplay(PaymentRecord p) {
+    if (p.status == PaymentStatus.paid) {
+      return (AppColors.syncSoft, AppColors.sync, 'Paid');
+    }
+    if (p.status == PaymentStatus.cancelled) {
+      return (AppColors.muted, AppColors.mutedForeground, 'Cancelled');
+    }
+    if (p.isOverdue) {
+      return (AppColors.dangerSoft, AppColors.danger, 'Overdue');
+    }
+    return (AppColors.pendingSoft, AppColors.pendingTextDark, 'Pending');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -786,7 +788,7 @@ class _PaymentsTab extends StatelessWidget {
         children: List.generate(child.payments.length, (i) {
           final p = child.payments[i];
           final isLast = i == child.payments.length - 1;
-          final (bg, fg) = _statusColors(p.status);
+          final (bg, fg, label) = _statusDisplay(p);
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
@@ -801,15 +803,14 @@ class _PaymentsTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(p.description, style: AppText.bodyMedium),
-                      Text(DateFormat('MMM d, yyyy').format(p.date),
-                          style: AppText.caption),
+                      Text(formatDate(p.dueDate), style: AppText.caption),
                     ],
                   ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('\$${p.amount.toStringAsFixed(0)}',
+                    Text(formatEtb(p.amount),
                         style: AppText.bodyMedium
                             .copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
@@ -821,8 +822,7 @@ class _PaymentsTab extends StatelessWidget {
                         borderRadius: BorderRadius.circular(99),
                       ),
                       child: Text(
-                        p.status.name[0].toUpperCase() +
-                            p.status.name.substring(1),
+                        label,
                         style: AppText.monoCaption.copyWith(
                             color: fg, fontWeight: FontWeight.w600, fontSize: 11),
                       ),
