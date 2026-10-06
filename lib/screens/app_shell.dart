@@ -3,8 +3,9 @@ import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
 import 'children_screen.dart';
 import 'register_screen.dart';
+import 'billing_screen.dart';
 
-enum _Screen { dashboard, children }
+enum _Screen { dashboard, children, billing }
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -15,11 +16,24 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   _Screen _screen = _Screen.dashboard;
+  String? _registeredChildId;
 
-  void _openRegister() {
-    Navigator.of(context).push(
+  Future<void> _openRegister() async {
+    final childId = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );
+    if (!mounted || childId == null) return;
+    setState(() {
+      _registeredChildId = childId;
+      _screen = _Screen.billing;
+    });
+  }
+
+  void _selectScreen(_Screen screen) {
+    setState(() {
+      _screen = screen;
+      if (screen != _Screen.billing) _registeredChildId = null;
+    });
   }
 
   @override
@@ -31,6 +45,10 @@ class _AppShellState extends State<AppShell> {
         child: switch (_screen) {
           _Screen.dashboard => const DashboardScreen(),
           _Screen.children => const ChildrenScreen(),
+          _Screen.billing => BillingScreen(
+              key: ValueKey(_registeredChildId),
+              registeredChildId: _registeredChildId,
+            ),
         },
       ),
       bottomNavigationBar: SafeArea(
@@ -38,7 +56,7 @@ class _AppShellState extends State<AppShell> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Container(
-            height: 82,
+            height: 90,
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(24),
@@ -57,25 +75,24 @@ class _AppShellState extends State<AppShell> {
                   icon: Icons.home_outlined,
                   label: 'Dashboard',
                   active: _screen == _Screen.dashboard,
-                  onTap: () => setState(() => _screen = _Screen.dashboard),
+                  onTap: () => _selectScreen(_Screen.dashboard),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Semantics(
-                        button: true,
-                        label: 'Register a child',
-                        child: Material(
-                          color: Colors.transparent,
-                          shape: const CircleBorder(),
-                          child: InkWell(
-                            onTap: _openRegister,
-                            customBorder: const CircleBorder(),
+                Expanded(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _openRegister,
+                      borderRadius: BorderRadius.circular(18),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Semantics(
+                            button: true,
+                            label: 'Register a child',
                             child: Ink(
-                              width: 42,
-                              height: 42,
+                              width: 47,
+                              height: 47,
                               decoration: const BoxDecoration(
                                 color: AppColors.foreground,
                                 shape: BoxShape.circle,
@@ -87,22 +104,34 @@ class _AppShellState extends State<AppShell> {
                                   ),
                                 ],
                               ),
-                              child: const Icon(Icons.add, color: Colors.white, size: 24),
+                              child: const Icon(
+                                Icons.add,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Register',
+                            style: AppText.caption.copyWith(fontSize: 12),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text('Register',
-                          style: AppText.caption.copyWith(fontSize: 10)),
-                    ],
+                    ),
                   ),
                 ),
                 _NavButton(
                   icon: Icons.people_outline,
                   label: 'Children',
                   active: _screen == _Screen.children,
-                  onTap: () => setState(() => _screen = _Screen.children),
+                  onTap: () => _selectScreen(_Screen.children),
+                ),
+                _NavButton(
+                  icon: Icons.receipt_long_outlined,
+                  label: 'Billing',
+                  active: _screen == _Screen.billing,
+                  onTap: () => _selectScreen(_Screen.billing),
                 ),
               ],
             ),
@@ -151,7 +180,7 @@ class _NavButton extends StatelessWidget {
               const SizedBox(height: 5),
               Text(label,
                   style: AppText.caption.copyWith(
-                    fontSize: 10,
+                    fontSize: 12,
                     color: color,
                     fontWeight: FontWeight.w600,
                   )),

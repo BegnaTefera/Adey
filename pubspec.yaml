@@ -28,8 +28,16 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   fonts:
+    - family: DMSans
+      fonts:
+        - asset: assets/fonts/DMSans-Variable.ttf
     - family: NotoSansEthiopic
       fonts:
         - asset: assets/fonts/NotoSansEthiopic-Regular.ttf
+    - family: DMMono
+      fonts:
+        - asset: assets/fonts/DMMono-Regular.ttf
+        - asset: assets/fonts/DMMono-Medium.ttf
+          weight: 500
   assets:
-    - assets/fonts/NotoSansEthiopic-Regular.ttf
+    - assets/fonts/

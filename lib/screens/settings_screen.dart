@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/settings_store.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_feedback.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -32,15 +33,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: AppText.caption,
               ),
               value: SettingsStore.instance.useEthiopianCalendar,
-              activeColor: AppColors.primary,
-              onChanged: (value) async {
-                await SettingsStore.instance.setUseEthiopianCalendar(value);
-                setState(() {});
-              },
+              activeThumbColor: AppColors.primary,
+              onChanged: _saveCalendarPreference,
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _saveCalendarPreference(bool value) async {
+    try {
+      await SettingsStore.instance.setUseEthiopianCalendar(value);
+      if (!mounted) return;
+      setState(() {});
+      showAppFeedback(
+        context,
+        message: 'Calendar preference saved.',
+        kind: AppFeedbackKind.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not save this preference. Try again. $error',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: () {
+          _saveCalendarPreference(value);
+        },
+      );
+    }
   }
 }

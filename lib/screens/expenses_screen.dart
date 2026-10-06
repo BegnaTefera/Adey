@@ -4,6 +4,7 @@ import '../data/expenses_store.dart';
 import '../data/formatters.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_feedback.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -44,10 +45,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         elevation: 0,
         title: Text('Expenses', style: AppText.sectionTitle),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _addExpense,
         backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add expense', style: TextStyle(color: Colors.white)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -69,9 +71,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           const SizedBox(height: 16),
           if (expenses.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text('No expenses logged yet', style: AppText.caption),
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 32,
+                    color: AppColors.mutedForeground,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('No expenses logged yet', style: AppText.bodyMedium),
+                  const SizedBox(height: 4),
+                  Text('Add an expense to start tracking this month.',
+                      style: AppText.caption, textAlign: TextAlign.center),
+                ],
               ),
             ),
           ...expenses.map(
@@ -118,15 +131,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  void _addExpense() {
+  Future<void> _addExpense() async {
     final categoryController = TextEditingController();
     final amountController = TextEditingController();
     final noteController = TextEditingController();
+    var isSaving = false;
+    String? errorMessage;
 
-    showModalBottomSheet(
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => Padding(
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
         padding: EdgeInsets.fromLTRB(
           16,
           16,
@@ -153,34 +169,78 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               controller: noteController,
               decoration: const InputDecoration(labelText: 'Note'),
             ),
+            if (errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                errorMessage!,
+                style: AppText.caption.copyWith(color: AppColors.danger),
+              ),
+            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () async {
+                onPressed: isSaving ? null : () async {
                   final amount = double.tryParse(amountController.text) ?? 0;
-                  if (categoryController.text.trim().isEmpty || amount <= 0) return;
-                  await ExpensesStore.instance.addExpense(
-                    ExpenseItem(
-                      id: const Uuid().v4(),
-                      category: categoryController.text.trim(),
-                      amount: amount,
-                      date: DateTime.now(),
-                      note: noteController.text.trim(),
-                    ),
-                  );
-                  if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                  if (categoryController.text.trim().isEmpty || amount <= 0) {
+                    setSheetState(() {
+                      errorMessage = 'Enter a category and an amount greater than zero.';
+                    });
+                    return;
+                  }
+                  setSheetState(() {
+                    isSaving = true;
+                    errorMessage = null;
+                  });
+                  try {
+                    await ExpensesStore.instance.addExpense(
+                      ExpenseItem(
+                        id: const Uuid().v4(),
+                        category: categoryController.text.trim(),
+                        amount: amount,
+                        date: DateTime.now(),
+                        note: noteController.text.trim(),
+                      ),
+                    );
+                    if (!sheetContext.mounted) return;
+                    Navigator.of(sheetContext).pop();
+                    if (mounted) {
+                      showAppFeedback(
+                        context,
+                        message: 'Expense saved.',
+                        kind: AppFeedbackKind.success,
+                      );
+                    }
+                  } catch (error) {
+                    if (!sheetContext.mounted) return;
+                    setSheetState(() => isSaving = false);
+                    showAppFeedback(
+                      sheetContext,
+                      message: 'Could not save the expense. Your entry is still here. $error',
+                      kind: AppFeedbackKind.error,
+                    );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Save expense'),
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save expense'),
               ),
             ),
           ],
         ),
+        ),
       ),
     );
+    categoryController.dispose();
+    amountController.dispose();
+    noteController.dispose();
   }
 }

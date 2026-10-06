@@ -112,20 +112,26 @@ class _ChildrenScreenState extends State<ChildrenScreen> {
                       ),
                     ),
                     if (_query.isNotEmpty)
-                      GestureDetector(
-                        onTap: () {
+                      IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () {
                           _searchController.clear();
                           setState(() => _query = '');
                         },
-                        child: const Icon(Icons.close,
-                            size: 16, color: AppColors.mutedForeground),
+                        icon: const Icon(
+                          Icons.close,
+                          size: 18,
+                          color: AppColors.mutedForeground,
+                        ),
                       ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
 
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _FilterPill(
                     label: 'Enrolled ($enrolledCount)',
@@ -133,14 +139,12 @@ class _ChildrenScreenState extends State<ChildrenScreen> {
                     onTap: () =>
                         setState(() => _filter = _StatusFilter.enrolled),
                   ),
-                  const SizedBox(width: 8),
                   _FilterPill(
                     label: 'Withdrawn ($withdrawnCount)',
                     selected: _filter == _StatusFilter.withdrawn,
                     onTap: () =>
                         setState(() => _filter = _StatusFilter.withdrawn),
                   ),
-                  const SizedBox(width: 8),
                   _FilterPill(
                     label: 'All',
                     selected: _filter == _StatusFilter.all,
@@ -152,9 +156,15 @@ class _ChildrenScreenState extends State<ChildrenScreen> {
           ),
         ),
         Expanded(
-          child: filtered.isEmpty
-              ? _EmptyState()
-              : ListView.separated(
+          child: AnimatedSwitcher(
+            duration: MediaQuery.of(context).disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            child: KeyedSubtree(
+              key: ValueKey(filtered.isEmpty),
+              child: filtered.isEmpty
+                  ? _EmptyState()
+                  : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: 1,
                   separatorBuilder: (_, __) => const SizedBox(),
@@ -254,6 +264,8 @@ class _ChildrenScreenState extends State<ChildrenScreen> {
                     );
                   },
                 ),
+              ),
+            ),
         ),
       ],
     );
@@ -270,22 +282,32 @@ class _FilterPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.foreground : Colors.transparent,
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-              color: selected ? AppColors.foreground : AppColors.border),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: selected ? AppColors.card : AppColors.mutedForeground,
+      borderRadius: BorderRadius.circular(99),
+      child: AnimatedContainer(
+          duration: MediaQuery.of(context).disableAnimations
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
+          constraints: const BoxConstraints(minHeight: 44),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.foreground : Colors.transparent,
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(
+              color: selected ? AppColors.foreground : AppColors.border,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: selected ? AppColors.card : AppColors.mutedForeground,
+            ),
           ),
         ),
       ),
@@ -302,7 +324,11 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('🔍', style: TextStyle(fontSize: 32)),
+            const Icon(
+              Icons.search_off_outlined,
+              size: 32,
+              color: AppColors.mutedForeground,
+            ),
             const SizedBox(height: 12),
             Text('No results', style: AppText.bodyMedium),
             const SizedBox(height: 4),

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 import '../models/fee_type.dart';
 import 'app_database.dart';
 
@@ -38,5 +39,40 @@ class FeeTypesStore extends ChangeNotifier {
       );
     }).toList();
     notifyListeners();
+  }
+
+  Future<void> save(FeeType feeType, {String? previousName}) async {
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.insert(
+        'fee_types',
+        {
+          'id': feeType.id,
+          'name': feeType.name,
+          'recurring': feeType.recurring ? 1 : 0,
+          'charge_on_registration': feeType.chargeOnRegistration ? 1 : 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      if (previousName != null && previousName != feeType.name) {
+        await txn.update(
+          'payments',
+          {'fee_type_name': feeType.name},
+          where: 'fee_type_name = ?',
+          whereArgs: [previousName],
+        );
+      }
+
+      await txn.delete(
+        'fee_rates',
+        where: 'fee_type_id = ?',
+        whereArgs: [feeType.id],
+      );
+      for (final rate in feeType.rates) {
+        await txn.insert('fee_rates', rate.toMap(feeType.id));
+      }
+    });
+    await refresh();
   }
 }

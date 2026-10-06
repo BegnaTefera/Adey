@@ -37,11 +37,11 @@ class AppText {
   static const List<String> _ethiopicFallback = ['NotoSansEthiopic'];
 
   static const TextStyle _sans = TextStyle(
-    fontFamily: 'sans-serif',
+    fontFamily: 'DMSans',
     fontFamilyFallback: _ethiopicFallback,
   );
   static const TextStyle _mono = TextStyle(
-    fontFamily: 'monospace',
+    fontFamily: 'DMMono',
     fontFamilyFallback: _ethiopicFallback,
   );
 
@@ -100,7 +100,7 @@ ThemeData buildAppTheme() {
   return ThemeData(
     useMaterial3: true,
     scaffoldBackgroundColor: AppColors.background,
-    fontFamily: 'sans-serif',
+    fontFamily: 'DMSans',
     fontFamilyFallback: const ['NotoSansEthiopic'],
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,

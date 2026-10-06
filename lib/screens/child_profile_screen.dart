@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
 import '../data/children_store.dart';
@@ -5,6 +7,7 @@ import '../data/formatters.dart';
 import '../models/authorized_pickup.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_feedback.dart';
 
 enum _Tab { info, guardians, documents, attendance, payments }
 
@@ -20,6 +23,7 @@ class ChildProfileScreen extends StatefulWidget {
 class _ChildProfileScreenState extends State<ChildProfileScreen> {
   _Tab _activeTab = _Tab.info;
   late Child _child = widget.child;
+  bool _isUpdatingEnrollmentStatus = false;
 
   static const _tabs = [
     (_Tab.info, 'Info'),
@@ -45,6 +49,99 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     final updated = ChildrenStore.instance.byId(widget.child.id);
     if (updated != null && mounted) {
       setState(() => _child = updated);
+    }
+  }
+
+  String? _childPhotoPath(Child child) {
+    for (final document in child.documents) {
+      if (document.type == DocumentType.photo &&
+          document.label.toLowerCase().contains('child') &&
+          document.status == DocumentStatus.onFile) {
+        return document.filePath;
+      }
+    }
+    return null;
+  }
+
+  Widget _profileAvatar(Child child) {
+    final photoPath = _childPhotoPath(child);
+    Widget initials() => Center(
+          child: Text(
+            child.initials,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
+
+    return ClipOval(
+      child: SizedBox(
+        width: 56,
+        height: 56,
+        child: photoPath == null
+            ? ColoredBox(color: AppColors.primary, child: initials())
+            : Image.file(
+                File(photoPath),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    ColoredBox(color: AppColors.primary, child: initials()),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _changeEnrollmentStatus(EnrollmentStatus status) async {
+    if (_isUpdatingEnrollmentStatus || status == _child.enrollmentStatus) {
+      return;
+    }
+    final nextLabel = status == EnrollmentStatus.enrolled
+        ? 'enrolled'
+        : 'withdrawn';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change enrollment status?'),
+        content: Text('Set ${_child.fullName} as $nextLabel?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(status == EnrollmentStatus.enrolled
+                ? 'Enroll child'
+                : 'Withdraw child'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isUpdatingEnrollmentStatus = true);
+    try {
+      await ChildrenStore.instance.updateChild(
+        _child.copyWith(enrollmentStatus: status),
+      );
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: '${_child.fullName} is now $nextLabel.',
+        kind: AppFeedbackKind.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not update enrollment status. Try again. $error',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: () => _changeEnrollmentStatus(status),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingEnrollmentStatus = false);
     }
   }
 
@@ -83,7 +180,14 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  if (nameController.text.trim().isEmpty) return;
+                  if (nameController.text.trim().isEmpty) {
+                    showAppFeedback(
+                      sheetContext,
+                      message: 'Enter a name before adding a pickup contact.',
+                      kind: AppFeedbackKind.error,
+                    );
+                    return;
+                  }
                   Navigator.of(sheetContext).pop(true);
                 },
                 style: ElevatedButton.styleFrom(
@@ -98,26 +202,84 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
       ),
     );
 
+    final name = nameController.text.trim();
+    final phone = phoneController.text.trim();
+    nameController.dispose();
+    phoneController.dispose();
     if (added != true) return;
 
-    final newPerson = AuthorizedPickup(
-      name: nameController.text.trim(),
-      phone: phoneController.text.trim(),
-    );
+    await _savePickupPerson(name, phone);
+  }
 
-    await ChildrenStore.instance.updateChild(
-      _child.copyWith(
-        additionalPickupPeople: [..._child.additionalPickupPeople, newPerson],
-      ),
-    );
+  Future<void> _savePickupPerson(String name, String phone) async {
+    final newPerson = AuthorizedPickup(name: name, phone: phone);
+    try {
+      await ChildrenStore.instance.updateChild(
+        _child.copyWith(
+          additionalPickupPeople: [..._child.additionalPickupPeople, newPerson],
+        ),
+      );
+      if (mounted) {
+        showAppFeedback(
+          context,
+          message: 'Authorized pickup added.',
+          kind: AppFeedbackKind.success,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppFeedback(
+          context,
+          message: 'Could not add this pickup contact. Try again. $error',
+          kind: AppFeedbackKind.error,
+          actionLabel: 'Retry',
+          onAction: () => _savePickupPerson(name, phone),
+        );
+      }
+    }
   }
 
   Future<void> _removePickupPerson(AuthorizedPickup person) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove pickup contact?'),
+        content: Text('Remove ${person.name} from authorized pickup?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     final updated = List<AuthorizedPickup>.from(_child.additionalPickupPeople)
       ..remove(person);
-    await ChildrenStore.instance.updateChild(
-      _child.copyWith(additionalPickupPeople: updated),
-    );
+    try {
+      await ChildrenStore.instance.updateChild(
+        _child.copyWith(additionalPickupPeople: updated),
+      );
+      if (mounted) {
+        showAppFeedback(
+          context,
+          message: 'Pickup contact removed.',
+          kind: AppFeedbackKind.success,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppFeedback(
+          context,
+          message: 'Could not remove this pickup contact. Try again. $error',
+          kind: AppFeedbackKind.error,
+        );
+      }
+    }
   }
 
   @override
@@ -155,61 +317,89 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          child.initials,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
+                      _profileAvatar(child),
                       const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(child.fullName, style: AppText.sectionTitle),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(child.ageLabel, style: AppText.caption),
-                              const SizedBox(width: 8),
-                              Text('·', style: AppText.caption),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: child.enrollmentStatus ==
-                                          EnrollmentStatus.enrolled
-                                      ? AppColors.syncSoft
-                                      : AppColors.muted,
-                                  borderRadius: BorderRadius.circular(99),
-                                ),
-                                child: Text(
-                                  child.enrollmentStatus ==
-                                          EnrollmentStatus.enrolled
-                                      ? 'Enrolled'
-                                      : 'Withdrawn',
-                                  style: AppText.monoCaption.copyWith(
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              child.fullName,
+                              style: AppText.sectionTitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Text(child.ageLabel, style: AppText.caption),
+                                const SizedBox(width: 8),
+                                Text('·', style: AppText.caption),
+                                const SizedBox(width: 8),
+                                PopupMenuButton<EnrollmentStatus>(
+                                tooltip: 'Change enrollment status',
+                                enabled: !_isUpdatingEnrollmentStatus,
+                                onSelected: _changeEnrollmentStatus,
+                                itemBuilder: (_) => [
+                                  const PopupMenuItem(
+                                    value: EnrollmentStatus.enrolled,
+                                    child: Text('Enrolled'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: EnrollmentStatus.withdrawn,
+                                    child: Text('Withdrawn'),
+                                  ),
+                                ],
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color: child.enrollmentStatus ==
                                             EnrollmentStatus.enrolled
-                                        ? AppColors.sync
-                                        : AppColors.mutedForeground,
-                                    fontWeight: FontWeight.w600,
+                                        ? AppColors.syncSoft
+                                        : AppColors.muted,
+                                    borderRadius: BorderRadius.circular(99),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        child.enrollmentStatus ==
+                                                EnrollmentStatus.enrolled
+                                            ? 'Enrolled'
+                                            : 'Withdrawn',
+                                        style: AppText.monoCaption.copyWith(
+                                          color: child.enrollmentStatus ==
+                                                  EnrollmentStatus.enrolled
+                                              ? AppColors.sync
+                                              : AppColors.mutedForeground,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      if (_isUpdatingEnrollmentStatus) ...[
+                                        const SizedBox(width: 6),
+                                        const SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      ] else
+                                        const Icon(
+                                          Icons.arrow_drop_down,
+                                          size: 18,
+                                        ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -222,6 +412,8 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                         return GestureDetector(
                           onTap: () => setState(() => _activeTab = t.$1),
                           child: Container(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            alignment: Alignment.bottomCenter,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
@@ -477,9 +669,22 @@ class _GuardiansTab extends StatelessWidget {
                           color: AppColors.syncSoft,
                           borderRadius: BorderRadius.circular(99),
                         ),
-                        child: Text('Pickup ✓',
-                            style: AppText.monoCaption
-                                .copyWith(color: AppColors.sync)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              size: 14,
+                              color: AppColors.sync,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Pickup',
+                              style: AppText.monoCaption
+                                  .copyWith(color: AppColors.sync),
+                            ),
+                          ],
+                        ),
                       ),
                   ],
                 ),
@@ -566,12 +771,12 @@ class _DocumentsTab extends StatelessWidget {
   final Child child;
   const _DocumentsTab({required this.child});
 
-  static const _icons = {
-    DocumentType.id: '🪪',
-    DocumentType.photo: '🖼️',
-    DocumentType.immunization: '💉',
-    DocumentType.registration: '📋',
-    DocumentType.other: '📄',
+  static const _icons = <DocumentType, IconData>{
+    DocumentType.id: Icons.badge_outlined,
+    DocumentType.photo: Icons.photo_outlined,
+    DocumentType.immunization: Icons.medical_services_outlined,
+    DocumentType.registration: Icons.assignment_outlined,
+    DocumentType.other: Icons.description_outlined,
   };
 
   (Color, Color) _statusColors(DocumentStatus s) {
@@ -619,8 +824,13 @@ class _DocumentsTab extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Text(_icons[doc.type] ?? '📄',
-                      style: const TextStyle(fontSize: 20)),
+                  ExcludeSemantics(
+                    child: Icon(
+                      _icons[doc.type] ?? Icons.description_outlined,
+                      size: 20,
+                      color: AppColors.primary,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -661,10 +871,10 @@ class _DocumentsTab extends StatelessWidget {
   Future<void> _openDocument(BuildContext context, ChildDocument doc) async {
     final path = doc.filePath;
     if (path == null || path.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("This document hasn't been captured yet."),
-        ),
+      showAppFeedback(
+        context,
+        message: "This document hasn't been captured yet. Add it from registration.",
+        kind: AppFeedbackKind.info,
       );
       return;
     }
@@ -682,7 +892,15 @@ class _DocumentsTab extends StatelessWidget {
         'Permission denied trying to open this file.',
       _ => 'Could not open this document (${result.message}).',
     };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    showAppFeedback(
+      context,
+      message: message,
+      kind: AppFeedbackKind.error,
+      actionLabel: result.type == ResultType.fileNotFound ? null : 'Retry',
+      onAction: result.type == ResultType.fileNotFound
+          ? null
+          : () => _openDocument(context, doc),
+    );
   }
 }
 

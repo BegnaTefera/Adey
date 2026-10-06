@@ -7,9 +7,12 @@ import '../data/search_utils.dart';
 import '../models/child.dart';
 import '../models/fee_type.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_feedback.dart';
 
 class BillingScreen extends StatefulWidget {
-  const BillingScreen({super.key});
+  final String? registeredChildId;
+
+  const BillingScreen({super.key, this.registeredChildId});
 
   @override
   State<BillingScreen> createState() => _BillingScreenState();
@@ -39,6 +42,9 @@ class _BillingScreenState extends State<BillingScreen> {
   @override
   Widget build(BuildContext context) {
     final feeTypes = FeeTypesStore.instance.feeTypes;
+    final registeredChild = widget.registeredChildId == null
+        ? null
+        : ChildrenStore.instance.byId(widget.registeredChildId!);
     final children = _showOverdueOnly
         ? ChildrenStore.instance.children.where((child) => child.payments.any((p) => p.isOverdue)).toList()
         : ChildrenStore.instance.children;
@@ -55,7 +61,9 @@ class _BillingScreenState extends State<BillingScreen> {
         title: Text('Billing', style: AppText.sectionTitle),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _logPayment,
+        onPressed: () => _logPayment(
+          initialChildId: widget.registeredChildId,
+        ),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Log payment', style: TextStyle(color: Colors.white)),
@@ -63,6 +71,42 @@ class _BillingScreenState extends State<BillingScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
         children: [
+          if (registeredChild != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.syncSoft,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.sync.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, color: AppColors.sync),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Registration complete', style: AppText.bodyMedium),
+                        Text(
+                          '${registeredChild.fullName} is enrolled.',
+                          style: AppText.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Log a payment for ${registeredChild.fullName}',
+                    onPressed: () => _logPayment(
+                      initialChildId: registeredChild.id,
+                    ),
+                    icon: const Icon(Icons.add_card_outlined),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Container(
             padding: const EdgeInsets.all(18),
             decoration: cardDecoration(),
@@ -78,7 +122,16 @@ class _BillingScreenState extends State<BillingScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text('Fee types', style: AppText.monoLabel),
+          Row(
+            children: [
+              Expanded(child: Text('Fee types', style: AppText.monoLabel)),
+              TextButton.icon(
+                onPressed: () => _editFeeType(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add fee type'),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           ...feeTypes.map(
             (fee) => Container(
@@ -94,8 +147,17 @@ class _BillingScreenState extends State<BillingScreen> {
                         child: Text(fee.name, style: AppText.bodyMedium),
                       ),
                       Text(
-                        fee.recurring ? 'Recurring' : 'One-off',
+                        fee.chargeOnRegistration
+                            ? 'At registration'
+                            : fee.recurring
+                                ? 'Recurring'
+                                : 'One-off',
                         style: AppText.caption,
+                      ),
+                      IconButton(
+                        tooltip: 'Edit ${fee.name}',
+                        onPressed: () => _editFeeType(fee),
+                        icon: const Icon(Icons.edit_outlined),
                       ),
                     ],
                   ),
@@ -126,7 +188,7 @@ class _BillingScreenState extends State<BillingScreen> {
               Switch(
                 value: _showOverdueOnly,
                 onChanged: (value) => setState(() => _showOverdueOnly = value),
-                activeColor: AppColors.primary,
+                activeThumbColor: AppColors.primary,
               ),
             ],
           ),
@@ -195,21 +257,97 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-  void _logPayment() {
+  Future<void> _editFeeType([FeeType? feeType]) async {
+    final editedFee = await showModalBottomSheet<FeeType>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _FeeTypeEditor(
+        feeType: feeType,
+        existingFees: FeeTypesStore.instance.feeTypes,
+      ),
+    );
+    if (editedFee == null || !mounted) return;
+
+    try {
+      await FeeTypesStore.instance.save(
+        editedFee,
+        previousName: feeType?.name,
+      );
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: feeType == null
+            ? 'Fee type added.'
+            : 'Fee type updated. Existing payments retain their amounts.',
+        kind: AppFeedbackKind.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not save this fee type. Try again. $error',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: () => _saveFeeType(editedFee, previousName: feeType?.name),
+      );
+    }
+  }
+
+  Future<void> _saveFeeType(FeeType feeType, {String? previousName}) async {
+    try {
+      await FeeTypesStore.instance.save(feeType, previousName: previousName);
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Fee type saved.',
+        kind: AppFeedbackKind.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not save this fee type. $error',
+        kind: AppFeedbackKind.error,
+      );
+    }
+  }
+
+  void _logPayment({String? initialChildId}) {
     final allEnrolledChildren = ChildrenStore.instance.children
         .where((c) => c.enrollmentStatus == EnrollmentStatus.enrolled)
         .toList();
 
     final feeTypes = FeeTypesStore.instance.feeTypes;
-    if (allEnrolledChildren.isEmpty || feeTypes.isEmpty) return;
+    if (allEnrolledChildren.isEmpty) {
+      showAppFeedback(
+        context,
+        message: 'Enroll a child before logging a payment.',
+        kind: AppFeedbackKind.info,
+      );
+      return;
+    }
+    if (feeTypes.isEmpty) {
+      showAppFeedback(
+        context,
+        message: 'Add a fee type in settings before logging a payment.',
+        kind: AppFeedbackKind.info,
+      );
+      return;
+    }
 
-    Child selectedChild = allEnrolledChildren.first;
+    Child selectedChild = allEnrolledChildren.firstWhere(
+      (child) => child.id == initialChildId,
+      orElse: () => allEnrolledChildren.first,
+    );
     FeeType selectedFee = feeTypes.first;
     final amountController = TextEditingController(
       text: selectedFee.rateForAge(selectedChild.ageInMonths).toStringAsFixed(0),
     );
     final descriptionController = TextEditingController(text: selectedFee.name);
     final guardianSearchController = TextEditingController();
+    var isSaving = false;
+    String? validationError;
 
     List<Child> matchingChildren(String query) {
       final normalizedQuery = normalizeForSearch(query);
@@ -291,7 +429,8 @@ class _BillingScreenState extends State<BillingScreen> {
                 _Dropdown<FeeType>(
                   value: selectedFee,
                   items: feeTypes,
-                  labelBuilder: (f) => f.name,
+                  labelBuilder: (fee) =>
+                      '${fee.name} · ${formatEtb(fee.rateForAge(selectedChild.ageInMonths))}',
                   onChanged: (f) {
                     setSheetState(() {
                       selectedFee = f;
@@ -320,14 +459,30 @@ class _BillingScreenState extends State<BillingScreen> {
                   'This records a payment that has already come in and marks it paid.',
                   style: AppText.caption,
                 ),
+                if (validationError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    validationError!,
+                    style: AppText.caption.copyWith(color: AppColors.danger),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () async {
+                    onPressed: isSaving ? null : () async {
                       final amount = double.tryParse(amountController.text) ?? 0;
-                      if (amount <= 0 || descriptionController.text.trim().isEmpty) return;
+                      if (amount <= 0 || descriptionController.text.trim().isEmpty) {
+                        setSheetState(() {
+                          validationError = 'Enter a description and an amount greater than zero.';
+                        });
+                        return;
+                      }
 
+                      setSheetState(() {
+                        isSaving = true;
+                        validationError = null;
+                      });
                       final now = DateTime.now();
                       final payment = PaymentRecord(
                         id: const Uuid().v4(),
@@ -339,19 +494,45 @@ class _BillingScreenState extends State<BillingScreen> {
                         paidAt: now,
                       );
 
-                      await ChildrenStore.instance.updateChild(
-                        selectedChild.copyWith(
-                          payments: [...selectedChild.payments, payment],
-                        ),
-                      );
-
-                      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                      try {
+                        await ChildrenStore.instance.updateChild(
+                          selectedChild.copyWith(
+                            payments: [...selectedChild.payments, payment],
+                          ),
+                        );
+                        if (!sheetContext.mounted) return;
+                        Navigator.of(sheetContext).pop();
+                        if (mounted) {
+                          showAppFeedback(
+                            context,
+                            message: 'Payment saved for ${selectedChild.fullName}.',
+                            kind: AppFeedbackKind.success,
+                          );
+                        }
+                      } catch (error) {
+                        if (!sheetContext.mounted) return;
+                        setSheetState(() => isSaving = false);
+                        setSheetState(() {
+                          validationError = 'Could not save the payment. Your entry is still here.';
+                        });
+                        showAppFeedback(
+                          sheetContext,
+                          message: '$error',
+                          kind: AppFeedbackKind.error,
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Save payment'),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save payment'),
                   ),
                 ),
               ],
@@ -438,6 +619,349 @@ class _SheetField extends StatelessWidget {
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
+      ),
+    );
+  }
+}
+
+enum _FeeKind { recurring, oneOff, registration }
+
+class _RateDraft {
+  final String? id;
+  final TextEditingController label;
+  final TextEditingController minMonths;
+  final TextEditingController maxMonths;
+  final TextEditingController rate;
+
+  _RateDraft({
+    this.id,
+    String label = '',
+    String minMonths = '0',
+    String maxMonths = '',
+    String rate = '',
+  })  : label = TextEditingController(text: label),
+        minMonths = TextEditingController(text: minMonths),
+        maxMonths = TextEditingController(text: maxMonths),
+        rate = TextEditingController(text: rate);
+
+  void dispose() {
+    label.dispose();
+    minMonths.dispose();
+    maxMonths.dispose();
+    rate.dispose();
+  }
+}
+
+class _FeeTypeEditor extends StatefulWidget {
+  final FeeType? feeType;
+  final List<FeeType> existingFees;
+
+  const _FeeTypeEditor({required this.feeType, required this.existingFees});
+
+  @override
+  State<_FeeTypeEditor> createState() => _FeeTypeEditorState();
+}
+
+class _FeeTypeEditorState extends State<_FeeTypeEditor> {
+  late final TextEditingController _nameController;
+  late final List<_RateDraft> _rules;
+  late _FeeKind _kind;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final fee = widget.feeType;
+    _nameController = TextEditingController(text: fee?.name ?? '');
+    _kind = fee == null
+        ? _FeeKind.oneOff
+        : fee.chargeOnRegistration
+            ? _FeeKind.registration
+            : fee.recurring
+                ? _FeeKind.recurring
+                : _FeeKind.oneOff;
+    _rules = fee == null || fee.rates.isEmpty
+        ? [_RateDraft(label: 'All ages')]
+        : fee.rates
+            .map(
+              (rate) => _RateDraft(
+                id: rate.id,
+                label: rate.label,
+                minMonths: '${rate.minMonths}',
+                maxMonths: rate.maxMonths?.toString() ?? '',
+                rate: rate.rate.toStringAsFixed(0),
+              ),
+            )
+            .toList();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    for (final rule in _rules) {
+      rule.dispose();
+    }
+    super.dispose();
+  }
+
+  void _save() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Enter a fee type name.');
+      return;
+    }
+    final duplicate = widget.existingFees.any(
+      (fee) =>
+          fee.id != widget.feeType?.id &&
+          fee.name.trim().toLowerCase() == name.toLowerCase(),
+    );
+    if (duplicate) {
+      setState(() => _error = 'A fee type with this name already exists.');
+      return;
+    }
+
+    final rates = <AgeBracket>[];
+    for (var i = 0; i < _rules.length; i++) {
+      final draft = _rules[i];
+      final minMonths = int.tryParse(draft.minMonths.text.trim());
+      final maxText = draft.maxMonths.text.trim();
+      final maxMonths = maxText.isEmpty ? null : int.tryParse(maxText);
+      final rate = double.tryParse(draft.rate.text.trim());
+      if (draft.label.text.trim().isEmpty ||
+          minMonths == null ||
+          minMonths < 0 ||
+          (maxText.isNotEmpty && maxMonths == null) ||
+          (maxMonths != null && maxMonths < minMonths) ||
+          rate == null ||
+          rate <= 0) {
+        setState(() => _error = 'Check each rule label, age range, and positive amount.');
+        return;
+      }
+      rates.add(
+        AgeBracket(
+          id: draft.id ?? const Uuid().v4(),
+          label: draft.label.text.trim(),
+          minMonths: minMonths,
+          maxMonths: maxMonths,
+          rate: rate,
+        ),
+      );
+    }
+
+    rates.sort((a, b) => a.minMonths.compareTo(b.minMonths));
+    if (rates.first.minMonths != 0) {
+      setState(() => _error = 'Age rules must start at 0 months.');
+      return;
+    }
+    for (var i = 1; i < rates.length; i++) {
+      final previousMax = rates[i - 1].maxMonths;
+      if (previousMax == null || rates[i].minMonths != previousMax + 1) {
+        setState(() => _error = 'Age rules must be continuous and cannot overlap.');
+        return;
+      }
+    }
+    if (rates.last.maxMonths != null) {
+      setState(() => _error = 'Leave the final age limit blank for older children.');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      FeeType(
+        id: widget.feeType?.id ?? const Uuid().v4(),
+        name: name,
+        recurring: _kind == _FeeKind.recurring,
+        chargeOnRegistration: _kind == _FeeKind.registration,
+        rates: rates,
+      ),
+    );
+  }
+
+  void _addRule() {
+    final lastMax = _rules.last.maxMonths.text.trim();
+    final nextMin = lastMax.isEmpty
+        ? '0'
+        : ((int.tryParse(lastMax) ?? -1) + 1).toString();
+    setState(() {
+      _rules.add(_RateDraft(minMonths: nextMin));
+      _error = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: FractionallySizedBox(
+        heightFactor: 0.92,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.feeType == null ? 'Add fee type' : 'Edit fee type',
+                    style: AppText.sectionTitle,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close fee editor',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  TextField(
+                    controller: _nameController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Fee name'),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Fee behavior', style: AppText.caption),
+                  const SizedBox(height: 8),
+                  SegmentedButton<_FeeKind>(
+                    segments: const [
+                      ButtonSegment(
+                        value: _FeeKind.recurring,
+                        label: Text('Recurring'),
+                      ),
+                      ButtonSegment(
+                        value: _FeeKind.oneOff,
+                        label: Text('One-off'),
+                      ),
+                      ButtonSegment(
+                        value: _FeeKind.registration,
+                        label: Text('Registration'),
+                      ),
+                    ],
+                    selected: {_kind},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (selection) =>
+                        setState(() => _kind = selection.first),
+                  ),
+                  const SizedBox(height: 20),
+                  Text('Age-based amount rules', style: AppText.bodyMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Use months. Leave the final upper age blank to cover older children.',
+                    style: AppText.caption,
+                  ),
+                  const SizedBox(height: 12),
+                  for (var i = 0; i < _rules.length; i++)
+                    _buildRule(i),
+                  OutlinedButton.icon(
+                    onPressed: _addRule,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add age rule'),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      style: AppText.bodyRegular.copyWith(
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _save,
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Save fee type'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRule(int index) {
+    final rule = _rules[index];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.muted,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Rule ${index + 1}', style: AppText.bodyMedium),
+              ),
+              if (_rules.length > 1)
+                IconButton(
+                  tooltip: 'Remove rule ${index + 1}',
+                  onPressed: () => setState(() {
+                    _rules.removeAt(index).dispose();
+                    _error = null;
+                  }),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: rule.label,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Label'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: rule.minMonths,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'From mo.'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: rule.maxMonths,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'To mo.'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: rule.rate,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Amount (ETB)'),
+          ),
+        ],
       ),
     );
   }

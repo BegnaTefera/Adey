@@ -14,14 +14,9 @@ import '../data/registration_pdf.dart';
 import '../models/child.dart';
 import '../models/authorized_pickup.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_feedback.dart';
 
-const _agreementText =
-    'By signing below, I confirm that the information provided about my '
-    'child is accurate to the best of my knowledge, and I agree to '
-    'enroll my child at this daycare under its standard policies. This '
-    'signature confirms enrollment only — any future changes to '
-    'contact, medical, or pickup information are updated separately in '
-    'the child\'s record and do not require a new signature.';
+const _agreementText = registrationAgreementText;
 
 const _guardianRelationships = [
   'Mother',
@@ -93,6 +88,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     'Documents',
     'Pickup',
     'Review & sign',
+    'Preview',
   ];
 
   @override
@@ -175,6 +171,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return true; // optional — guardians are already authorized pickups
       case 4:
         return _signatureStrokes.isNotEmpty;
+      case 5:
+        return true;
       default:
         return false;
     }
@@ -226,7 +224,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildStepBody(),
+                child: AnimatedSwitcher(
+                  duration: MediaQuery.of(context).disableAnimations
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  child: KeyedSubtree(
+                    key: ValueKey(_step),
+                    child: _buildStepBody(),
+                  ),
+                ),
               ),
             ),
             Padding(
@@ -262,7 +268,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : Text(_step == _stepTitles.length - 1 ? 'Complete registration' : 'Next'),
+                            : Text(
+                              _step == _stepTitles.length - 1
+                                ? 'Confirm & continue to billing'
+                                : _step == 4
+                                  ? 'Preview registration'
+                                  : 'Next',
+                            ),
                     ),
                   ),
                 ],
@@ -286,6 +298,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return _buildPickupStep();
       case 4:
         return _buildReviewStep();
+      case 5:
+        return _buildPreviewStep();
       default:
         return const SizedBox();
     }
@@ -528,7 +542,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 16),
           _DocumentButton(
-            label: 'Parent photo',
+            label: 'Primary guardian photo',
             icon: Icons.photo_camera_outlined,
             captured: _parentPhotoPath != null,
             statusLabel: _parentPhotoPath != null ? 'Captured' : 'Not captured',
@@ -719,6 +733,171 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ..addAll(smoothed);
   }
 
+  Widget _buildPreviewStep() {
+    final address = [
+      _subCityController.text.trim(),
+      _woredaController.text.trim(),
+      _houseNumberController.text.trim(),
+    ].where((part) => part.isNotEmpty).join(', ');
+    final pickups = [
+      for (var i = 0; i < _pickupPeople.length; i++)
+        ('Pickup ${i + 1}', '${_pickupPeople[i].name} · ${_pickupPeople[i].phone}'),
+    ];
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Registration preview', style: AppText.sectionTitle),
+          const SizedBox(height: 4),
+          Text('Check these details before saving.', style: AppText.caption),
+          const SizedBox(height: 16),
+          _previewSection('Child', [
+            ('Name', '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'),
+            ('Gender', _gender == Gender.male ? 'Male' : 'Female'),
+            ('Date of birth', _dob == null ? '' : _ethiopianDateLabel(_dob!)),
+            ('Allergies', _allergiesController.text.trim().isEmpty ? 'None recorded' : _allergiesController.text.trim()),
+            ('Health', _healthController.text.trim().isEmpty ? 'None recorded' : _healthController.text.trim()),
+            ('Diet', _dietController.text.trim().isEmpty ? 'None recorded' : _dietController.text.trim()),
+            ('Special notes', _specialController.text.trim().isEmpty ? 'None recorded' : _specialController.text.trim()),
+          ]),
+          const SizedBox(height: 12),
+          _previewSection('Guardian', [
+            ('Name', _guardianNameController.text.trim()),
+            ('Relationship', _guardianRelationship ?? ''),
+            ('Phone', _phoneController.text.trim()),
+            ('Email', _emailController.text.trim()),
+            ('Address', address),
+          ]),
+          if (_hasSecondGuardian) ...[
+            const SizedBox(height: 12),
+            _previewSection('Second guardian', [
+              ('Name', _secondGuardianNameController.text.trim()),
+              ('Relationship', _secondRelationshipController.text.trim()),
+              ('Phone', _secondPhoneController.text.trim()),
+              ('Email', _secondEmailController.text.trim()),
+              ('Address', [
+                _secondSubCityController.text.trim(),
+                _secondWoredaController.text.trim(),
+                _secondHouseNumberController.text.trim(),
+              ].where((part) => part.isNotEmpty).join(', ')),
+            ]),
+          ],
+          const SizedBox(height: 12),
+          _previewSection(
+            'Authorized pickup',
+            pickups.isEmpty ? [('Additional people', 'None')] : pickups,
+          ),
+          const SizedBox(height: 12),
+          _previewSection('Documents', [
+            ('Guardian ID', _guardianIdImagePath == null ? 'Not captured' : 'Captured'),
+            (
+              'Immunization pages',
+              _immunizationPagePaths.isEmpty
+                  ? 'Not captured'
+                  : '${_immunizationPagePaths.length} captured',
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: cardDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Photos', style: AppText.bodyMedium),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _previewPhoto('Guardian', _parentPhotoPath),
+                    const SizedBox(width: 16),
+                    _previewPhoto('Child', _childPhotoPath),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('Agreement', style: AppText.bodyMedium),
+                const SizedBox(height: 6),
+                Text(_agreementText, style: AppText.bodyRegular.copyWith(height: 1.5)),
+                const SizedBox(height: 12),
+                Text('Signature', style: AppText.caption),
+                const SizedBox(height: 6),
+                Container(
+                  height: 88,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: CustomPaint(painter: _SignaturePainter(_signatureStrokes)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewSection(String title, List<(String, String)> rows) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppText.bodyMedium),
+          const SizedBox(height: 8),
+          for (final row in rows)
+            if (row.$2.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 104, child: Text(row.$1, style: AppText.caption)),
+                    Expanded(child: Text(row.$2, style: AppText.bodyRegular)),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewPhoto(String label, String? path) {
+    return Expanded(
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 80,
+              height: 96,
+              child: path == null
+                  ? const ColoredBox(
+                      color: AppColors.muted,
+                      child: Icon(Icons.person_outline, color: AppColors.mutedForeground),
+                    )
+                  : Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const ColoredBox(
+                        color: AppColors.muted,
+                        child: Icon(Icons.broken_image_outlined),
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: AppText.caption),
+        ],
+      ),
+    );
+  }
+
   Future<DateTime?> _pickEthiopianDate() async {
     final today = DateTime.now();
     final firstDate = DateTime(today.year - 12, today.month, today.day);
@@ -757,8 +936,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => onCaptured(file.path));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open camera: $e')),
+      showAppFeedback(
+        context,
+        message: 'Could not open the camera. Check permission and try again.',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: () => _captureImage(onCaptured: onCaptured),
       );
     }
   }
@@ -791,6 +974,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final timestamp = now.millisecondsSinceEpoch;
       const uuid = Uuid();
       final documents = <ChildDocument>[];
+        final guardianPhotoBytes = _parentPhotoPath == null
+          ? null
+          : await File(_parentPhotoPath!).readAsBytes();
+        final childPhotoBytes = _childPhotoPath == null
+          ? null
+          : await File(_childPhotoPath!).readAsBytes();
+          final guardianPhotoLabel = _guardianRelationship == 'Father'
+            ? 'Father photo'
+            : 'Primary guardian photo';
 
       // Guardian ID
       if (_guardianIdImagePath != null) {
@@ -819,15 +1011,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       // Parent photo
-      if (_parentPhotoPath != null) {
-        final bytes = await File(_parentPhotoPath!).readAsBytes();
+      if (guardianPhotoBytes != null) {
         final (path, hash) = await DocumentStorage.save(
-          bytes: bytes,
-          filename: 'parent_photo_$timestamp.jpg',
+          bytes: guardianPhotoBytes,
+          filename: 'guardian_photo_$timestamp.jpg',
         );
         documents.add(ChildDocument(
           id: uuid.v4(),
-          label: 'Parent photo',
+          label: guardianPhotoLabel,
           type: DocumentType.photo,
           uploadedAt: now,
           status: DocumentStatus.onFile,
@@ -837,7 +1028,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       } else {
         documents.add(ChildDocument(
           id: uuid.v4(),
-          label: 'Parent photo',
+          label: guardianPhotoLabel,
           type: DocumentType.photo,
           uploadedAt: now,
           status: DocumentStatus.pending,
@@ -845,10 +1036,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       // Child photo
-      if (_childPhotoPath != null) {
-        final bytes = await File(_childPhotoPath!).readAsBytes();
+      if (childPhotoBytes != null) {
         final (path, hash) = await DocumentStorage.save(
-          bytes: bytes,
+          bytes: childPhotoBytes,
           filename: 'child_photo_$timestamp.jpg',
         );
         documents.add(ChildDocument(
@@ -954,6 +1144,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           specialCharacteristics: _specialController.text.trim(),
           pickupPeople: List.of(_pickupPeople),
           agreementText: _agreementText,
+            guardianPhotoBytes: guardianPhotoBytes,
+            childPhotoBytes: childPhotoBytes,
+            guardianPhotoLabel:
+              _guardianRelationship == 'Father' ? 'Father' : 'Guardian',
           signatureStrokes: _signatureStrokes,
           signatureAreaSize: _signatureAreaSize,
           signedAt: now,
@@ -996,31 +1190,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await ChildrenStore.instance.addChild(child);
 
       if (!mounted) return;
-      await showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Registration complete'),
-          content: const Text(
-            'The enrollment and signed agreement have been saved locally '
-            'and are ready to sync to the desktop app.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Done'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(child.id);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not complete registration: $e')),
+      showAppFeedback(
+        context,
+        message: 'Could not complete registration. Your details are still here. $e',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: _completeRegistration,
       );
     }
   }
@@ -1289,8 +1468,12 @@ class _ImmunizationGalleryDialogState
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open camera: $error')),
+      showAppFeedback(
+        context,
+        message: 'Could not open the camera. Check permission and try again.',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: _addPage,
       );
     } finally {
       if (mounted) setState(() => _isAdding = false);

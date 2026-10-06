@@ -36,11 +36,15 @@ class _AppStartup extends StatefulWidget {
 }
 
 class _AppStartupState extends State<_AppStartup> {
-  late final Future<void> _initFuture;
+  late Future<void> _initFuture;
 
   @override
   void initState() {
     super.initState();
+    _initialize();
+  }
+
+  void _initialize() {
     _initFuture = Future.wait([
       ChildrenStore.instance.init(),
       ExpensesStore.instance.init(),
@@ -68,10 +72,33 @@ class _AppStartupState extends State<_AppStartup> {
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not open local storage: ${snapshot.error}',
-                  style: AppText.bodyRegular,
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.storage_outlined,
+                      size: 36,
+                      color: AppColors.danger,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Could not open local storage.',
+                      style: AppText.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${snapshot.error}',
+                      style: AppText.caption,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => setState(_initialize),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Try again'),
+                    ),
+                  ],
                 ),
               ),
             ),
