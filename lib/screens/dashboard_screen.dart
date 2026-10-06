@@ -1,0 +1,355 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../data/children_store.dart';
+import '../models/child.dart';
+import '../theme/app_theme.dart';
+import 'attendance_screen.dart';
+import 'billing_screen.dart';
+import 'expenses_screen.dart';
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    ChildrenStore.instance.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    ChildrenStore.instance.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
+  }
+
+  List<PaymentRecord> get _overduePayments {
+    final result = <PaymentRecord>[];
+    for (final child in ChildrenStore.instance.children) {
+      result.addAll(
+        child.payments.where((p) => p.status == PaymentStatus.overdue),
+      );
+    }
+    return result;
+  }
+
+  bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateFormat('EEEE, MMMM d').format(DateTime.now());
+    final enrolledChildren = ChildrenStore.instance.children
+      .where((child) => child.enrollmentStatus == EnrollmentStatus.enrolled)
+      .toList();
+    final enrolledTotal = enrolledChildren.length;
+    final checkedIn = enrolledChildren.where((child) {
+      final todayRecord = child.attendance.cast<AttendanceRecord?>().firstWhere(
+        (record) => record != null && _isToday(record.date),
+        orElse: () => null,
+        );
+      return todayRecord?.status == AttendanceStatus.present ||
+        todayRecord?.status == AttendanceStatus.late;
+    }).length;
+    final attendancePct = enrolledTotal == 0
+      ? 0
+      : (checkedIn / enrolledTotal * 100).round();
+    final overdue = _overduePayments;
+    final totalOutstanding =
+        overdue.fold<double>(0, (sum, p) => sum + p.amount);
+
+    return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(today.toUpperCase(), style: AppText.monoLabel),
+            const SizedBox(height: 4),
+            Text('Good morning, Admin', style: AppText.pageTitle),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _QuickAction(
+                  label: 'Attendance',
+                  icon: Icons.calendar_today_outlined,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AttendanceScreen(),
+                    ),
+                  ),
+                ),
+                _QuickAction(
+                  label: 'Billing',
+                  icon: Icons.receipt_long_outlined,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BillingScreen(),
+                    ),
+                  ),
+                ),
+                _QuickAction(
+                  label: 'Expenses',
+                  icon: Icons.payments_outlined,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ExpensesScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
+
+            // Today's attendance card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: cardDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("TODAY'S ATTENDANCE", style: AppText.monoLabel),
+                      Text('$enrolledTotal enrolled',
+                          style: AppText.monoCaption),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('$checkedIn', style: AppText.bigNumber),
+                      const SizedBox(width: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text('/ $enrolledTotal',
+                            style: AppText.caption.copyWith(fontSize: 18)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: attendancePct / 100,
+                      minHeight: 8,
+                      backgroundColor: AppColors.muted,
+                      valueColor:
+                          const AlwaysStoppedAnimation(AppColors.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${enrolledTotal - checkedIn} absent today',
+                          style: AppText.caption),
+                      Text('$attendancePct%',
+                          style: AppText.monoCaption.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Overdue payments card
+            Container(
+              decoration: cardDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('OVERDUE PAYMENTS', style: AppText.monoLabel),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.dangerSoft,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            '${overdue.length} families',
+                            style: AppText.monoCaption.copyWith(
+                                color: AppColors.danger,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ...List.generate(overdue.length, (i) {
+                    final child = ChildrenStore.instance.children.firstWhere(
+                        (c) => c.payments.contains(overdue[i]));
+                    final isLast = i == overdue.length - 1;
+                    return Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        border: isLast
+                            ? null
+                            : const Border(
+                                top: BorderSide(color: AppColors.border)),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: AppColors.primary,
+                            child: Text(child.initials,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(child.fullName, style: AppText.bodyMedium),
+                                Text(
+                                  '${DateTime.now().difference(overdue[i].date).inDays}d overdue',
+                                  style: AppText.caption,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text('\$${overdue[i].amount.toStringAsFixed(0)}',
+                              style: AppText.bodyMedium.copyWith(
+                                  color: AppColors.danger,
+                                  fontFamily:
+                                      AppText.monoCaption.fontFamily)),
+                        ],
+                      ),
+                    );
+                  }),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total outstanding', style: AppText.caption),
+                        Text(
+                          '\$${totalOutstanding.toStringAsFixed(0)}',
+                          style: AppText.bodyMedium.copyWith(
+                              color: AppColors.danger,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Sync status card
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: cardDecoration(),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: AppColors.sync,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Local SQLite', style: AppText.bodyMedium),
+                        Text('Changes are saved on this device',
+                            style: AppText.caption),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.syncSoft,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('Live',
+                        style: AppText.monoCaption.copyWith(
+                            color: AppColors.sync,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _QuickAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(label, style: AppText.bodyMedium.copyWith(fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}

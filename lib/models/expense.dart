@@ -1,0 +1,31 @@
+class ExpenseItem {
+  final String id;
+  final String category;
+  final double amount;
+  final String date;
+  final String note;
+
+  const ExpenseItem({
+    required this.id,
+    required this.category,
+    required this.amount,
+    required this.date,
+    required this.note,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'category': category,
+        'amount': amount,
+        'date': date,
+        'note': note,
+      };
+
+  factory ExpenseItem.fromMap(Map<String, dynamic> map) => ExpenseItem(
+        id: map['id'] as String,
+        category: map['category'] as String,
+        amount: (map['amount'] as num).toDouble(),
+        date: map['date'] as String,
+        note: map['note'] as String,
+      );
+}
