@@ -59,7 +59,7 @@ class ChildrenRepository {
       'payments',
       where: 'child_id = ?',
       whereArgs: [childId],
-      orderBy: 'date DESC',
+      orderBy: 'due_date DESC',
     );
     return rows.map(PaymentRecord.fromMap).toList();
   }
