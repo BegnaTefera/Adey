@@ -133,7 +133,18 @@ class _BillingScreenState extends State<BillingScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          ...feeTypes.map(
+          if (feeTypes.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: cardDecoration(),
+              child: Text(
+                'No fee types yet. Add at least one before registering a child or logging a payment.',
+                style: AppText.caption,
+              ),
+            )
+          else
+            ...feeTypes.map(
             (fee) => Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
@@ -181,7 +192,7 @@ class _BillingScreenState extends State<BillingScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          if (feeTypes.isNotEmpty) const SizedBox(height: 16),
           Row(
             children: [
               Expanded(child: Text('Child balances', style: AppText.monoLabel)),
@@ -330,7 +341,7 @@ class _BillingScreenState extends State<BillingScreen> {
     if (feeTypes.isEmpty) {
       showAppFeedback(
         context,
-        message: 'Add a fee type in settings before logging a payment.',
+        message: 'Add a fee type before logging a payment.',
         kind: AppFeedbackKind.info,
       );
       return;
@@ -340,11 +351,8 @@ class _BillingScreenState extends State<BillingScreen> {
       (child) => child.id == initialChildId,
       orElse: () => allEnrolledChildren.first,
     );
-    FeeType selectedFee = feeTypes.first;
-    final amountController = TextEditingController(
-      text: selectedFee.rateForAge(selectedChild.ageInMonths).toStringAsFixed(0),
-    );
-    final descriptionController = TextEditingController(text: selectedFee.name);
+    final lines = [_PaymentLineDraft(feeTypes.first, selectedChild)];
+    final descriptionController = TextEditingController();
     final guardianSearchController = TextEditingController();
     var isSaving = false;
     String? validationError;
@@ -370,15 +378,33 @@ class _BillingScreenState extends State<BillingScreen> {
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
-          void applySuggestedRate() {
-            amountController.text =
-                selectedFee.rateForAge(selectedChild.ageInMonths).toStringAsFixed(0);
+          void applySuggestedRatesForChild() {
+            for (final line in lines) {
+              line.applySuggestedAmount(selectedChild);
+            }
           }
 
           var filteredChildren = matchingChildren(guardianSearchController.text);
           if (filteredChildren.isEmpty) filteredChildren = allEnrolledChildren;
           if (!filteredChildren.contains(selectedChild)) {
             selectedChild = filteredChildren.first;
+            applySuggestedRatesForChild();
+          }
+
+          double lineTotal() {
+            var sum = 0.0;
+            for (final line in lines) {
+              sum += double.tryParse(line.amount.text.trim()) ?? 0;
+            }
+            return sum;
+          }
+
+          FeeType defaultFeeForNewLine() {
+            final used = lines.map((l) => l.feeType.id).toSet();
+            for (final fee in feeTypes) {
+              if (!used.contains(fee.id)) return fee;
+            }
+            return feeTypes.first;
           }
 
           return Padding(
@@ -388,157 +414,292 @@ class _BillingScreenState extends State<BillingScreen> {
               16,
               MediaQuery.of(sheetContext).viewInsets.bottom + 16,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Log payment', style: AppText.sectionTitle),
-                const SizedBox(height: 16),
-                Text('Find by guardian name or phone', style: AppText.caption),
-                const SizedBox(height: 6),
-                _SheetField(
-                  controller: guardianSearchController,
-                  hint: 'e.g. the name shown on the bank transfer',
-                  onChanged: (_) => setSheetState(() {}),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Matches by child or guardian name — handles small '
-                  'spelling differences and works in Amharic too.',
-                  style: AppText.caption,
-                ),
-                const SizedBox(height: 12),
-                Text('Child', style: AppText.caption),
-                const SizedBox(height: 6),
-                _Dropdown<Child>(
-                  value: selectedChild,
-                  items: filteredChildren,
-                  labelBuilder: (c) => c.guardians.isNotEmpty
-                      ? '${c.fullName} (${c.guardians.first.name})'
-                      : c.fullName,
-                  onChanged: (c) {
-                    setSheetState(() {
-                      selectedChild = c;
-                      applySuggestedRate();
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                Text('Fee type', style: AppText.caption),
-                const SizedBox(height: 6),
-                _Dropdown<FeeType>(
-                  value: selectedFee,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Log payment', style: AppText.sectionTitle),
+                  const SizedBox(height: 16),
+                  Text('Find by guardian name or phone', style: AppText.caption),
+                  const SizedBox(height: 6),
+                  _SheetField(
+                    controller: guardianSearchController,
+                    hint: 'e.g. the name shown on the bank transfer',
+                    onChanged: (_) => setSheetState(() {}),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Matches by child or guardian name — handles small '
+                    'spelling differences and works in Amharic too.',
+                    style: AppText.caption,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Child', style: AppText.caption),
+                  const SizedBox(height: 6),
+                  _Dropdown<Child>(
+                    value: selectedChild,
+                    items: filteredChildren,
+                    labelBuilder: (c) => c.guardians.isNotEmpty
+                        ? '${c.fullName} (${c.guardians.first.name})'
+                        : c.fullName,
+                    onChanged: (c) {
+                      setSheetState(() {
+                        selectedChild = c;
+                        applySuggestedRatesForChild();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: Text('Fees in this payment', style: AppText.caption)),
+                      TextButton.icon(
+                        onPressed: lines.length >= feeTypes.length
+                            ? null
+                            : () => setSheetState(() {
+                                  lines.add(
+                                    _PaymentLineDraft(defaultFeeForNewLine(), selectedChild),
+                                  );
+                                }),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add fee'),
+                      ),
+                    ],
+                  ),
+                  for (var i = 0; i < lines.length; i++) ...[
+                    _PaymentLineRow(
+                      line: lines[i],
+                      feeTypes: feeTypes,
+                      selectedChild: selectedChild,
+                      canRemove: lines.length > 1,
+                      onRemove: () => setSheetState(() {
+                        lines.removeAt(i).dispose();
+                      }),
+                      onChanged: () => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.muted,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total logged', style: AppText.bodyMedium),
+                        Text(
+                          formatEtb(lineTotal()),
+                          style: AppText.sectionTitle.copyWith(color: AppColors.primary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Note (optional)', style: AppText.caption),
+                  const SizedBox(height: 6),
+                  _SheetField(
+                    controller: descriptionController,
+                    hint: 'Bank reference or receipt note',
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Records money already received — one paid row per fee, '
+                    'total above is the combined amount.',
+                    style: AppText.caption,
+                  ),
+                  if (validationError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      validationError!,
+                      style: AppText.caption.copyWith(color: AppColors.danger),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              var total = 0.0;
+                              final newPayments = <PaymentRecord>[];
+                              final now = DateTime.now();
+                              final note = descriptionController.text.trim();
+                              const uuid = Uuid();
+
+                              for (final line in lines) {
+                                final amount =
+                                    double.tryParse(line.amount.text.trim()) ?? 0;
+                                if (amount <= 0) {
+                                  setSheetState(() {
+                                    validationError =
+                                        'Each fee needs an amount greater than zero.';
+                                  });
+                                  return;
+                                }
+                                total += amount;
+                                final feeName = line.feeType.name;
+                                newPayments.add(
+                                  PaymentRecord(
+                                    id: uuid.v4(),
+                                    feeTypeName: feeName,
+                                    description: note.isEmpty
+                                        ? feeName
+                                        : '$feeName · $note',
+                                    amount: amount,
+                                    status: PaymentStatus.paid,
+                                    dueDate: now,
+                                    paidAt: now,
+                                  ),
+                                );
+                              }
+
+                              setSheetState(() {
+                                isSaving = true;
+                                validationError = null;
+                              });
+
+                              try {
+                                await ChildrenStore.instance.updateChild(
+                                  selectedChild.copyWith(
+                                    payments: [
+                                      ...selectedChild.payments,
+                                      ...newPayments,
+                                    ],
+                                  ),
+                                );
+                                if (!sheetContext.mounted) return;
+                                Navigator.of(sheetContext).pop();
+                                if (mounted) {
+                                  showAppFeedback(
+                                    context,
+                                    message:
+                                        '${formatEtb(total)} logged for ${selectedChild.fullName}.',
+                                    kind: AppFeedbackKind.success,
+                                  );
+                                }
+                              } catch (error) {
+                                if (!sheetContext.mounted) return;
+                                setSheetState(() => isSaving = false);
+                                setSheetState(() {
+                                  validationError =
+                                      'Could not save the payment. Your entry is still here.';
+                                });
+                                showAppFeedback(
+                                  sheetContext,
+                                  message: '$error',
+                                  kind: AppFeedbackKind.error,
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Save payment'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ).whenComplete(() {
+      for (final line in lines) {
+        line.dispose();
+      }
+      descriptionController.dispose();
+      guardianSearchController.dispose();
+    });
+  }
+}
+
+class _PaymentLineDraft {
+  FeeType feeType;
+  final TextEditingController amount;
+
+  _PaymentLineDraft(this.feeType, Child child)
+      : amount = TextEditingController(
+          text: feeType.rateForAge(child.ageInMonths).toStringAsFixed(0),
+        );
+
+  void applySuggestedAmount(Child child) {
+    amount.text = feeType.rateForAge(child.ageInMonths).toStringAsFixed(0);
+  }
+
+  void dispose() => amount.dispose();
+}
+
+class _PaymentLineRow extends StatelessWidget {
+  final _PaymentLineDraft line;
+  final List<FeeType> feeTypes;
+  final Child selectedChild;
+  final bool canRemove;
+  final VoidCallback onRemove;
+  final VoidCallback onChanged;
+
+  const _PaymentLineRow({
+    required this.line,
+    required this.feeTypes,
+    required this.selectedChild,
+    required this.canRemove,
+    required this.onRemove,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _Dropdown<FeeType>(
+                  value: line.feeType,
                   items: feeTypes,
                   labelBuilder: (fee) =>
                       '${fee.name} · ${formatEtb(fee.rateForAge(selectedChild.ageInMonths))}',
                   onChanged: (f) {
-                    setSheetState(() {
-                      selectedFee = f;
-                      descriptionController.text = f.name;
-                      applySuggestedRate();
-                    });
+                    line.feeType = f;
+                    line.applySuggestedAmount(selectedChild);
+                    onChanged();
                   },
                 ),
-                const SizedBox(height: 12),
-                Text('Description', style: AppText.caption),
-                const SizedBox(height: 6),
-                _SheetField(controller: descriptionController),
-                const SizedBox(height: 12),
-                Text(
-                  'Amount — suggested rate for ${selectedChild.ageLabel}: '
-                  '${formatEtb(selectedFee.rateForAge(selectedChild.ageInMonths))}',
-                  style: AppText.caption,
+              ),
+              if (canRemove)
+                IconButton(
+                  tooltip: 'Remove fee line',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.close, size: 20),
                 ),
-                const SizedBox(height: 6),
-                _SheetField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'This records a payment that has already come in and marks it paid.',
-                  style: AppText.caption,
-                ),
-                if (validationError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    validationError!,
-                    style: AppText.caption.copyWith(color: AppColors.danger),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isSaving ? null : () async {
-                      final amount = double.tryParse(amountController.text) ?? 0;
-                      if (amount <= 0 || descriptionController.text.trim().isEmpty) {
-                        setSheetState(() {
-                          validationError = 'Enter a description and an amount greater than zero.';
-                        });
-                        return;
-                      }
-
-                      setSheetState(() {
-                        isSaving = true;
-                        validationError = null;
-                      });
-                      final now = DateTime.now();
-                      final payment = PaymentRecord(
-                        id: const Uuid().v4(),
-                        feeTypeName: selectedFee.name,
-                        description: descriptionController.text.trim(),
-                        amount: amount,
-                        status: PaymentStatus.paid,
-                        dueDate: now,
-                        paidAt: now,
-                      );
-
-                      try {
-                        await ChildrenStore.instance.updateChild(
-                          selectedChild.copyWith(
-                            payments: [...selectedChild.payments, payment],
-                          ),
-                        );
-                        if (!sheetContext.mounted) return;
-                        Navigator.of(sheetContext).pop();
-                        if (mounted) {
-                          showAppFeedback(
-                            context,
-                            message: 'Payment saved for ${selectedChild.fullName}.',
-                            kind: AppFeedbackKind.success,
-                          );
-                        }
-                      } catch (error) {
-                        if (!sheetContext.mounted) return;
-                        setSheetState(() => isSaving = false);
-                        setSheetState(() {
-                          validationError = 'Could not save the payment. Your entry is still here.';
-                        });
-                        showAppFeedback(
-                          sheetContext,
-                          message: '$error',
-                          kind: AppFeedbackKind.error,
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Save payment'),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+            ],
+          ),
+          const SizedBox(height: 8),
+          _SheetField(
+            controller: line.amount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => onChanged(),
+          ),
+        ],
       ),
     );
   }

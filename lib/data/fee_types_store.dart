@@ -13,6 +13,8 @@ class FeeTypesStore extends ChangeNotifier {
 
   List<FeeType> get feeTypes => List.unmodifiable(_feeTypes);
 
+  bool get hasAnyFeeTypes => _feeTypes.isNotEmpty;
+
   Future<void> init() async {
     if (_initialized) return;
     await refresh();
@@ -44,6 +46,7 @@ class FeeTypesStore extends ChangeNotifier {
   Future<void> save(FeeType feeType, {String? previousName}) async {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
+      final now = DateTime.now().toIso8601String();
       await txn.insert(
         'fee_types',
         {
@@ -51,6 +54,7 @@ class FeeTypesStore extends ChangeNotifier {
           'name': feeType.name,
           'recurring': feeType.recurring ? 1 : 0,
           'charge_on_registration': feeType.chargeOnRegistration ? 1 : 0,
+          'updated_at': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );

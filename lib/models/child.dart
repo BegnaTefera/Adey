@@ -79,6 +79,7 @@ class Guardian {
         'sub_city': subCity,
         'woreda': woreda,
         'house_number': houseNumber,
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
   factory Guardian.fromMap(Map<String, dynamic> map) => Guardian(
@@ -103,6 +104,7 @@ class ChildDocument {
   final DocumentStatus status;
   final String? filePath;
   final String? sha256;
+  final bool printed;
 
   const ChildDocument({
     required this.id,
@@ -112,7 +114,19 @@ class ChildDocument {
     required this.status,
     this.filePath,
     this.sha256,
+    this.printed = true,
   });
+
+  ChildDocument copyWith({bool? printed, String? filePath}) => ChildDocument(
+        id: id,
+        label: label,
+        type: type,
+        uploadedAt: uploadedAt,
+        status: status,
+        filePath: filePath ?? this.filePath,
+        sha256: sha256,
+        printed: printed ?? this.printed,
+      );
 
   Map<String, dynamic> toMap(String childId) => {
         'id': id,
@@ -123,6 +137,8 @@ class ChildDocument {
         'status': status.name,
         'file_path': filePath,
         'sha256': sha256,
+        'printed': printed ? 1 : 0,
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
   factory ChildDocument.fromMap(Map<String, dynamic> map) => ChildDocument(
@@ -133,6 +149,7 @@ class ChildDocument {
         status: DocumentStatus.values.byName(map['status'] as String),
         filePath: map['file_path'] as String?,
         sha256: map['sha256'] as String?,
+        printed: (map['printed'] as int?) != 0,
       );
 }
 
@@ -158,6 +175,7 @@ class AttendanceRecord {
         'check_in': checkIn,
         'check_out': checkOut,
         'status': status.name,
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
   factory AttendanceRecord.fromMap(Map<String, dynamic> map) =>
@@ -222,6 +240,7 @@ class PaymentRecord {
         'due_date': dueDate.toIso8601String(),
         'paid_at': paidAt?.toIso8601String(),
         'cycle_label': cycleLabel,
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
   factory PaymentRecord.fromMap(Map<String, dynamic> map) => PaymentRecord(

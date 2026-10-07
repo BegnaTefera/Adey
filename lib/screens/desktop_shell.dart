@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../data/fee_types_store.dart';
 import '../data/sync/sync_service.dart';
+import '../widgets/app_feedback.dart';
 import '../theme/app_theme.dart';
 import 'attendance_screen.dart';
 import 'billing_screen.dart';
@@ -39,6 +41,15 @@ class _DesktopShellState extends State<DesktopShell> {
   }
 
   Future<void> _openRegister() async {
+    if (!FeeTypesStore.instance.hasAnyFeeTypes) {
+      showAppFeedback(
+        context,
+        message:
+            'Create at least one fee type on the Billing screen before registering a child.',
+        kind: AppFeedbackKind.info,
+      );
+      return;
+    }
     final childId = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const RegisterScreen()),
     );

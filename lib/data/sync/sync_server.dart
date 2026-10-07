@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import '../document_storage.dart';
+import '../settings_store.dart';
 import 'sync_models.dart';
 import 'sync_service.dart';
 
@@ -10,17 +13,15 @@ class SyncServer {
   static final SyncServer instance = SyncServer._internal();
 
   HttpServer? _server;
-  String _pairingCode = '123456';
   bool _running = false;
   int _port = 8080;
+  final Set<String> _connectedIpsToday = {};
+  String _connectionDay = '';
 
   bool get isRunning => _running;
   int get port => _port;
-  String get pairingCode => _pairingCode;
-
-  void setPairingCode(String code) {
-    _pairingCode = code;
-  }
+  String get pairingCode => SettingsStore.instance.desktopPairingCode;
+  int get devicesConnectedToday => _connectedIpsToday.length;
 
   Future<String?> getLocalIpAddress() async {
     try {
@@ -66,11 +67,27 @@ class SyncServer {
     debugPrint('SyncServer stopped.');
   }
 
+  void _recordConnection(HttpRequest request) {
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (_connectionDay != today) {
+      _connectionDay = today;
+      _connectedIpsToday.clear();
+    }
+    _connectedIpsToday.add(request.connectionInfo?.remoteAddress.address ?? 'unknown');
+  }
+
+  bool _isAuthorized(HttpRequest request, String path) {
+    final incomingCode = request.headers.value('X-Pairing-Code');
+    if (path == '/ping') {
+      return incomingCode == pairingCode;
+    }
+    return incomingCode == pairingCode;
+  }
+
   void _handleRequest(HttpRequest request) async {
     final path = request.uri.path;
     final method = request.method;
 
-    // CORS headers for convenience
     request.response.headers.set('Access-Control-Allow-Origin', '*');
     request.response.headers.set('Access-Control-Allow-Headers', '*');
     request.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -81,23 +98,22 @@ class SyncServer {
       return;
     }
 
-    // Verify pairing code (except /ping without header for initial check)
-    final incomingCode = request.headers.value('X-Pairing-Code');
-    if (incomingCode != _pairingCode && path != '/ping') {
+    if (!_isAuthorized(request, path)) {
       request.response.statusCode = HttpStatus.unauthorized;
       request.response.write(jsonEncode({'error': 'Invalid pairing code'}));
       await request.response.close();
       return;
     }
 
+    _recordConnection(request);
+
     try {
       if (path == '/ping') {
-        final matches = incomingCode == _pairingCode;
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({
           'status': 'ok',
           'deviceName': 'Adey Desktop Server',
-          'paired': matches,
+          'paired': true,
         }));
       } else if (path == '/changes' && method == 'GET') {
         final sinceStr = request.uri.queryParameters['since'];
@@ -109,21 +125,44 @@ class SyncServer {
         final bodyText = await utf8.decoder.bind(request).join();
         final json = jsonDecode(bodyText) as Map<String, dynamic>;
         final incomingPayload = SyncPayload.fromJson(json);
-        final conflictsCount = await SyncService.instance.importChanges(incomingPayload);
+        final result = await SyncService.instance.importChanges(incomingPayload);
+        await _storeIncomingFiles(result.missingHashes, incomingPayload);
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({
           'status': 'ok',
-          'conflicts': conflictsCount,
+          'conflicts': result.conflictCount,
+          'missing_hashes': await _missingHashesForPayload(incomingPayload),
         }));
       } else if (path == '/file' && method == 'GET') {
-        final filePath = request.uri.queryParameters['path'];
-        if (filePath != null && File(filePath).existsSync()) {
-          final file = File(filePath);
-          request.response.headers.contentType = ContentType.binary;
-          await file.openRead().pipe(request.response);
-          return;
+        final hash = request.uri.queryParameters['hash'];
+        if (hash == null) {
+          request.response.statusCode = HttpStatus.badRequest;
         } else {
-          request.response.statusCode = HttpStatus.notFound;
+          final path = await DocumentStorage.localPathForHash(hash);
+          if (path != null) {
+            final file = File(path);
+            request.response.headers.contentType = ContentType.binary;
+            await file.openRead().pipe(request.response);
+            return;
+          } else {
+            request.response.statusCode = HttpStatus.notFound;
+          }
+        }
+      } else if (path == '/file' && method == 'POST') {
+        final hash = request.uri.queryParameters['hash'];
+        if (hash == null) {
+          request.response.statusCode = HttpStatus.badRequest;
+        } else if (await DocumentStorage.hasBytesForHash(hash)) {
+          request.response.statusCode = HttpStatus.ok;
+        } else {
+          final chunks = <int>[];
+          await for (final chunk in request) {
+            chunks.addAll(chunk);
+          }
+          final bytes = Uint8List.fromList(chunks);
+          final (savedPath, _) = await DocumentStorage.saveByHash(bytes: bytes, hash: hash);
+          await SyncService.instance.attachDownloadedFile(hash, savedPath);
+          request.response.statusCode = HttpStatus.ok;
         }
       } else {
         request.response.statusCode = HttpStatus.notFound;
@@ -135,5 +174,27 @@ class SyncServer {
     }
 
     await request.response.close();
+  }
+
+  Future<List<String>> _missingHashesForPayload(SyncPayload payload) async {
+    final docs = payload.tables['documents'] ?? [];
+    final missing = <String>[];
+    for (final row in docs) {
+      final hash = row['sha256'] as String?;
+      if (hash == null || hash.isEmpty) continue;
+      if (!await DocumentStorage.hasBytesForHash(hash)) {
+        missing.add(hash);
+      }
+    }
+    return missing;
+  }
+
+  Future<void> _storeIncomingFiles(
+    List<String> missingHashes,
+    SyncPayload payload,
+  ) async {
+    // Server-side import already flagged missing hashes; client uploads via POST /file.
+    if (missingHashes.isEmpty) return;
+    debugPrint('SyncServer waiting for ${missingHashes.length} file upload(s).');
   }
 }

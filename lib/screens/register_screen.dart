@@ -1174,6 +1174,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         status: DocumentStatus.onFile,
         filePath: pdfPath,
         sha256: pdfHash,
+        printed: false,
       ));
 
       final child = Child(

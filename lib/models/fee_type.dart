@@ -20,6 +20,7 @@ class AgeBracket {
         'min_months': minMonths,
         'max_months': maxMonths,
         'rate': rate,
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
   factory AgeBracket.fromMap(Map<String, Object?> map) => AgeBracket(

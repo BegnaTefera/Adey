@@ -19,6 +19,7 @@ class ExpenseItem {
         'amount': amount,
         'date': date.toIso8601String(),
         'note': note,
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
   factory ExpenseItem.fromMap(Map<String, dynamic> map) => ExpenseItem(
