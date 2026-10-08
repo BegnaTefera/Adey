@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../data/formatters.dart';
 import '../data/settings_store.dart';
 import '../data/sync/sync_client.dart';
 import '../data/sync/sync_server.dart';
@@ -8,11 +7,12 @@ import '../screens/settings_screen.dart';
 import '../theme/app_theme.dart';
 import 'app_feedback.dart';
 
-/// The sync card on the dashboard, phrased for each side's role.
+/// The sync card on the dashboard — a live indicator, nothing more.
 ///
-/// Mobile (a client): a colored dot — green synced within the last few
-/// minutes, amber longer ago or never, red if the last attempt failed —
-/// plus "Last synced …" and an inline "Sync now".
+/// Mobile (a client): a colored dot — green if synced, red if not — plus a
+/// "Sync now" button. The detail (last synced time, auto-sync note, the
+/// last error) lives in Settings so the dashboard doesn't flicker every
+/// time an automatic background sync completes.
 ///
 /// Desktop (the server): "Sync server: On · 2 devices connected today".
 /// It has no last-synced time because nothing is synced *to* anything;
@@ -26,6 +26,7 @@ class SyncStatusCard extends StatefulWidget {
 
 class _SyncStatusCardState extends State<SyncStatusCard> {
   String? _serverIp;
+  bool _manualSyncing = false;
 
   @override
   void initState() {
@@ -65,8 +66,12 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
       _openSettings();
       return;
     }
+    // Local flag, not SyncService.runStatus: background auto-syncs never
+    // touch the run status, so this only tracks the user's own tap.
+    setState(() => _manualSyncing = true);
     final result = await SyncClient.instance.syncNow();
     if (!mounted) return;
+    setState(() => _manualSyncing = false);
     showAppFeedback(
       context,
       message: result.message,
@@ -135,53 +140,29 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
     final settings = SettingsStore.instance;
     final configured =
         settings.syncServerIp.isNotEmpty && settings.syncPairingCode.isNotEmpty;
-    final syncing = service.runStatus == SyncRunStatus.syncing;
     final failed = service.runStatus == SyncRunStatus.failed;
-    final last = service.lastSyncTime;
+    final synced = configured && !failed && service.isRecentlySynced;
 
     final Color dotColor;
-    if (failed) {
-      dotColor = AppColors.danger;
-    } else if (service.isRecentlySynced) {
-      dotColor = AppColors.sync;
-    } else {
+    final String label;
+    if (!configured) {
       dotColor = AppColors.accent;
-    }
-
-    final title = last == null ? 'Not synced yet' : 'Last synced ${formatDateTime(last)}';
-    final String subtitle;
-    if (syncing) {
-      subtitle = 'Syncing…';
-    } else if (failed) {
-      subtitle = service.lastError ?? 'The last sync attempt failed';
-    } else if (!configured) {
-      subtitle = 'Add the desktop address and code in Settings';
+      label = 'Not paired';
+    } else if (synced) {
+      dotColor = AppColors.sync;
+      label = 'Synced';
     } else {
-      subtitle = 'Auto-sync on — edits copy in seconds, no button needed';
+      dotColor = AppColors.danger;
+      label = 'Not synced';
     }
 
     return Row(
       children: [
         _dot(dotColor),
         const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppText.bodyMedium),
-              Text(
-                subtitle,
-                style: AppText.caption.copyWith(
-                  color: failed ? AppColors.danger : AppColors.mutedForeground,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
+        Expanded(child: Text(label, style: AppText.bodyMedium)),
         const SizedBox(width: 8),
-        syncing
+        _manualSyncing
             ? const SizedBox(
                 width: 20,
                 height: 20,

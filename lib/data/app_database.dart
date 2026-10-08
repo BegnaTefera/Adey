@@ -27,7 +27,7 @@ class AppDatabase {
     final path = join(dbPath, 'daycare.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -66,6 +66,7 @@ class AppDatabase {
             woreda TEXT NOT NULL DEFAULT '',
             house_number TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (child_id) REFERENCES children (id) ON DELETE CASCADE
           )
         ''');
@@ -82,6 +83,7 @@ class AppDatabase {
             sha256 TEXT,
             printed INTEGER NOT NULL DEFAULT 1,
             updated_at TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (child_id) REFERENCES children (id) ON DELETE CASCADE
           )
         ''');
@@ -95,6 +97,7 @@ class AppDatabase {
             check_out TEXT,
             status TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (child_id) REFERENCES children (id) ON DELETE CASCADE
           )
         ''');
@@ -111,6 +114,7 @@ class AppDatabase {
             paid_at TEXT,
             cycle_label TEXT,
             updated_at TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (child_id) REFERENCES children (id) ON DELETE CASCADE
           )
         ''');
@@ -232,7 +236,32 @@ class AppDatabase {
             'ALTER TABLE expenses ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
           );
         }
+        if (oldVersion < 6) {
+          // Same tombstone trick for a child's nested rows, so deleting a
+          // payment, document, guardian, or attendance record on one device
+          // doesn't reappear on the next sync pull.
+          for (final table in [
+            'guardians',
+            'documents',
+            'attendance',
+            'payments',
+          ]) {
+            if (await _tableExists(db, table)) {
+              await db.execute(
+                'ALTER TABLE $table ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
+              );
+            }
+          }
+        }
       },
     );
+  }
+
+  Future<bool> _tableExists(Database db, String table) async {
+    final rows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [table],
+    );
+    return rows.isNotEmpty;
   }
 }

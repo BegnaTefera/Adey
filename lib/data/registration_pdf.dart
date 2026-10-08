@@ -52,7 +52,6 @@ class RegistrationPdfData {
   final String agreementText;
   final Uint8List? guardianPhotoBytes;
   final Uint8List? childPhotoBytes;
-  final String guardianPhotoLabel;
   final List<List<ui.Offset>> signatureStrokes;
   final ui.Size signatureAreaSize;
   final DateTime signedAt;
@@ -70,7 +69,6 @@ class RegistrationPdfData {
     required this.agreementText,
     this.guardianPhotoBytes,
     this.childPhotoBytes,
-    this.guardianPhotoLabel = 'Guardian',
     required this.signatureStrokes,
     required this.signatureAreaSize,
     required this.signedAt,
@@ -124,10 +122,7 @@ Future<Uint8List> buildRegistrationPdf(RegistrationPdfData data) async {
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
-                  _passportPhoto(
-                    data.guardianPhotoBytes,
-                    data.guardianPhotoLabel,
-                  ),
+                  _passportPhoto(data.guardianPhotoBytes),
                   pw.SizedBox(width: 12),
                   pw.Expanded(
                     child: pw.Column(
@@ -147,7 +142,7 @@ Future<Uint8List> buildRegistrationPdf(RegistrationPdfData data) async {
                     ),
                   ),
                   pw.SizedBox(width: 12),
-                  _passportPhoto(data.childPhotoBytes, 'Child'),
+                  _passportPhoto(data.childPhotoBytes),
                 ],
               ),
               pw.SizedBox(height: 12),
@@ -324,30 +319,23 @@ Future<Uint8List> buildRegistrationPdf(RegistrationPdfData data) async {
   return doc.save();
 }
 
-pw.Widget _passportPhoto(Uint8List? bytes, String label) {
+pw.Widget _passportPhoto(Uint8List? bytes) {
   const width = 99.0;
   const height = 128.0;
-  return pw.Column(
-    mainAxisSize: pw.MainAxisSize.min,
-    children: [
-      pw.Container(
-        width: width,
-        height: height,
-        decoration: pw.BoxDecoration(
-          border: pw.Border.all(color: PdfColors.grey500),
-        ),
-        child: bytes == null
-            ? pw.Center(
-                child: pw.Text(
-                  'No photo',
-                  style: const pw.TextStyle(fontSize: 9),
-                ),
-              )
-            : pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.cover),
-      ),
-      pw.SizedBox(height: 3),
-      pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
-    ],
+  return pw.Container(
+    width: width,
+    height: height,
+    decoration: pw.BoxDecoration(
+      border: pw.Border.all(color: PdfColors.grey500),
+    ),
+    child: bytes == null
+        ? pw.Center(
+            child: pw.Text(
+              'No photo',
+              style: const pw.TextStyle(fontSize: 9),
+            ),
+          )
+        : pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.cover),
   );
 }
 

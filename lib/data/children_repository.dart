@@ -30,14 +30,18 @@ class ChildrenRepository {
   }
 
   Future<List<Guardian>> _fetchGuardians(Database db, String childId) async {
-    final rows = await db.query('guardians', where: 'child_id = ?', whereArgs: [childId]);
+    final rows = await db.query(
+      'guardians',
+      where: 'child_id = ? AND deleted = 0',
+      whereArgs: [childId],
+    );
     return rows.map(Guardian.fromMap).toList();
   }
 
   Future<List<ChildDocument>> _fetchDocuments(Database db, String childId) async {
     final rows = await db.query(
       'documents',
-      where: 'child_id = ?',
+      where: 'child_id = ? AND deleted = 0',
       whereArgs: [childId],
       orderBy: 'uploaded_at',
     );
@@ -47,7 +51,7 @@ class ChildrenRepository {
   Future<List<AttendanceRecord>> _fetchAttendance(Database db, String childId) async {
     final rows = await db.query(
       'attendance',
-      where: 'child_id = ?',
+      where: 'child_id = ? AND deleted = 0',
       whereArgs: [childId],
       orderBy: 'date DESC',
     );
@@ -57,7 +61,7 @@ class ChildrenRepository {
   Future<List<PaymentRecord>> _fetchPayments(Database db, String childId) async {
     final rows = await db.query(
       'payments',
-      where: 'child_id = ?',
+      where: 'child_id = ? AND deleted = 0',
       whereArgs: [childId],
       orderBy: 'due_date DESC',
     );
@@ -183,6 +187,9 @@ class ChildrenRepository {
     for (final row in rows) {
       final id = row['id'] as String;
       keepIds.add(id);
+      // A row that's present in the model is alive again (sync uses
+      // tombstones, so an id can come back after a soft delete).
+      row['deleted'] = 0;
       final existing = existingById[id];
       if (existing == null) {
         row['updated_at'] = now;
@@ -200,9 +207,16 @@ class ChildrenRepository {
     }
 
     for (final id in existingById.keys) {
-      if (!keepIds.contains(id)) {
-        await txn.delete(table, where: 'id = ?', whereArgs: [id]);
-      }
+      if (keepIds.contains(id)) continue;
+      // Already a tombstone: leave it (and its `updated_at`) alone so an
+      // unrelated edit to the child doesn't keep bumping the delete.
+      if (existingById[id]!['deleted'] == 1) continue;
+      await txn.update(
+        table,
+        {'deleted': 1, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
     }
   }
 

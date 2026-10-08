@@ -11,6 +11,7 @@ import '../models/authorized_pickup.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import 'child_profile_editors.dart';
 
 enum _Tab { info, guardians, documents, attendance, payments }
 
@@ -285,6 +286,136 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     }
   }
 
+  Future<void> _editChildInfo() async {
+    final updated = await showEditChildSheet(context, _child);
+    if (updated == null || !mounted) return;
+    await _persist(updated, 'Child details updated.');
+  }
+
+  Future<void> _addGuardian() async {
+    final guardian = await showGuardianEditorSheet(context);
+    if (guardian == null || !mounted) return;
+    await _persist(
+      _child.copyWith(guardians: [..._child.guardians, guardian]),
+      'Guardian added.',
+    );
+  }
+
+  Future<void> _editGuardian(Guardian guardian) async {
+    final updated = await showGuardianEditorSheet(context, guardian: guardian);
+    if (updated == null || !mounted) return;
+    final list = _child.guardians
+        .map((g) => g.id == guardian.id ? updated : g)
+        .toList();
+    await _persist(_child.copyWith(guardians: list), 'Guardian updated.');
+  }
+
+  Future<void> _deleteGuardian(Guardian guardian) async {
+    final confirmed = await _confirm(
+      'Remove guardian?',
+      'Remove ${guardian.name} from ${_child.firstName}?',
+    );
+    if (!confirmed || !mounted) return;
+    final list = _child.guardians.where((g) => g.id != guardian.id).toList();
+    await _persist(_child.copyWith(guardians: list), 'Guardian removed.');
+  }
+
+  Future<void> _addDocument() async {
+    final document = await showDocumentEditorSheet(context);
+    if (document == null || !mounted) return;
+    await _persist(
+      _child.copyWith(documents: [..._child.documents, document]),
+      'Document added.',
+    );
+  }
+
+  Future<void> _editDocument(ChildDocument document) async {
+    final updated = await showDocumentEditorSheet(context, document: document);
+    if (updated == null || !mounted) return;
+    final list = _child.documents
+        .map((d) => d.id == document.id ? updated : d)
+        .toList();
+    await _persist(_child.copyWith(documents: list), 'Document updated.');
+  }
+
+  Future<void> _deleteDocument(ChildDocument document) async {
+    final confirmed = await _confirm(
+      'Remove document?',
+      'Remove "${document.label}" from ${_child.firstName}?',
+    );
+    if (!confirmed || !mounted) return;
+    final list = _child.documents.where((d) => d.id != document.id).toList();
+    await _persist(_child.copyWith(documents: list), 'Document removed.');
+  }
+
+  Future<void> _addPayment() async {
+    final payment = await showPaymentEditorSheet(context);
+    if (payment == null || !mounted) return;
+    await _persist(
+      _child.copyWith(payments: [..._child.payments, payment]),
+      'Payment logged.',
+    );
+  }
+
+  Future<void> _editPayment(PaymentRecord payment) async {
+    final updated = await showPaymentEditorSheet(context, payment: payment);
+    if (updated == null || !mounted) return;
+    final list =
+        _child.payments.map((p) => p.id == payment.id ? updated : p).toList();
+    await _persist(_child.copyWith(payments: list), 'Payment updated.');
+  }
+
+  Future<void> _deletePayment(PaymentRecord payment) async {
+    final confirmed = await _confirm(
+      'Remove payment?',
+      'Remove "${payment.description}" (${formatEtb(payment.amount)})?',
+    );
+    if (!confirmed || !mounted) return;
+    final list = _child.payments.where((p) => p.id != payment.id).toList();
+    await _persist(_child.copyWith(payments: list), 'Payment removed.');
+  }
+
+  Future<bool> _confirm(String title, String message) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<void> _persist(Child updated, String message) async {
+    try {
+      await ChildrenStore.instance.updateChild(updated);
+      if (mounted) {
+        showAppFeedback(context, message: message,
+            kind: AppFeedbackKind.success);
+      }
+    } catch (error) {
+      if (mounted) {
+        showAppFeedback(
+          context,
+          message: 'Could not save the change. Try again. $error',
+          kind: AppFeedbackKind.error,
+          actionLabel: 'Retry',
+          onAction: () => _persist(updated, message),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final child = _child;
@@ -456,15 +587,28 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: switch (_activeTab) {
-                  _Tab.info => _InfoTab(child: child),
+                  _Tab.info => _InfoTab(child: child, onEdit: _editChildInfo),
                   _Tab.guardians => _GuardiansTab(
                       child: child,
                       onAddPickup: _addPickupPerson,
                       onRemovePickup: _removePickupPerson,
+                      onAddGuardian: _addGuardian,
+                      onEditGuardian: _editGuardian,
+                      onDeleteGuardian: _deleteGuardian,
                     ),
-                  _Tab.documents => _DocumentsTab(child: child),
+                  _Tab.documents => _DocumentsTab(
+                      child: child,
+                      onAdd: _addDocument,
+                      onEdit: _editDocument,
+                      onDelete: _deleteDocument,
+                    ),
                   _Tab.attendance => _AttendanceTab(child: child),
-                  _Tab.payments => _PaymentsTab(child: child),
+                  _Tab.payments => _PaymentsTab(
+                      child: child,
+                      onAdd: _addPayment,
+                      onEdit: _editPayment,
+                      onDelete: _deletePayment,
+                    ),
                 },
               ),
             ),
@@ -477,22 +621,36 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
 
 class _InfoTab extends StatelessWidget {
   final Child child;
-  const _InfoTab({required this.child});
+  final VoidCallback onEdit;
+  const _InfoTab({required this.child, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('PERSONAL', style: AppText.monoLabel),
+            TextButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Edit'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         Container(
           decoration: cardDecoration(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text('PERSONAL', style: AppText.monoLabel),
-              ),
               _Row('Full name', child.fullName),
               _Row('Gender', child.gender == Gender.male ? 'Male' : 'Female'),
               _Row('Date of birth', formatDate(child.dob)),
@@ -618,11 +776,17 @@ class _GuardiansTab extends StatelessWidget {
   final Child child;
   final VoidCallback onAddPickup;
   final ValueChanged<AuthorizedPickup> onRemovePickup;
+  final VoidCallback onAddGuardian;
+  final ValueChanged<Guardian> onEditGuardian;
+  final ValueChanged<Guardian> onDeleteGuardian;
 
   const _GuardiansTab({
     required this.child,
     required this.onAddPickup,
     required this.onRemovePickup,
+    required this.onAddGuardian,
+    required this.onEditGuardian,
+    required this.onDeleteGuardian,
   });
 
   @override
@@ -630,6 +794,23 @@ class _GuardiansTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('GUARDIANS', style: AppText.monoLabel),
+            TextButton.icon(
+              onPressed: onAddGuardian,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         ...child.guardians.map((g) {
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -694,6 +875,20 @@ class _GuardiansTab extends StatelessWidget {
                           ],
                         ),
                       ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined,
+                          size: 18, color: AppColors.mutedForeground),
+                      tooltip: 'Edit guardian',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => onEditGuardian(g),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: AppColors.danger),
+                      tooltip: 'Remove guardian',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => onDeleteGuardian(g),
+                    ),
                   ],
                 ),
               ),
@@ -777,7 +972,15 @@ class _GuardiansTab extends StatelessWidget {
 
 class _DocumentsTab extends StatelessWidget {
   final Child child;
-  const _DocumentsTab({required this.child});
+  final VoidCallback onAdd;
+  final ValueChanged<ChildDocument> onEdit;
+  final ValueChanged<ChildDocument> onDelete;
+  const _DocumentsTab({
+    required this.child,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   static const _icons = <DocumentType, IconData>{
     DocumentType.id: Icons.badge_outlined,
@@ -804,16 +1007,38 @@ class _DocumentsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (child.documents.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Text('No documents on file yet', style: AppText.caption),
-        ),
-      );
-    }
     final isDesktop = SettingsStore.instance.isDesktop;
-    return Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('DOCUMENTS', style: AppText.monoLabel),
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (child.documents.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Text(
+              'No documents on file yet. Tap Add to attach immunization '
+              'records, IDs, or photos.',
+              style: AppText.caption,
+            ),
+          )
+        else
+          Container(
       decoration: cardDecoration(),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -823,7 +1048,7 @@ class _DocumentsTab extends StatelessWidget {
           final (bg, fg) = _statusColors(doc.status);
           final canOpen = doc.filePath != null && doc.filePath!.isNotEmpty;
           return InkWell(
-            onTap: () => _openDocument(context, doc),
+            onTap: () => _openDocument(context, doc, onEdit),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
@@ -877,6 +1102,19 @@ class _DocumentsTab extends StatelessWidget {
                       tooltip: 'Print',
                       onPressed: () => _printDocument(context, doc),
                     ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Document actions',
+                    icon: const Icon(Icons.more_vert,
+                        size: 18, color: AppColors.mutedForeground),
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit(doc);
+                      if (value == 'delete') onDelete(doc);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Remove')),
+                    ],
+                  ),
                   const SizedBox(width: 8),
                   Icon(
                     canOpen ? Icons.chevron_right : Icons.hourglass_empty,
@@ -889,6 +1127,8 @@ class _DocumentsTab extends StatelessWidget {
           );
         }),
       ),
+    ),
+      ],
     );
   }
 
@@ -916,14 +1156,16 @@ class _DocumentsTab extends StatelessWidget {
     }
   }
 
-  Future<void> _openDocument(BuildContext context, ChildDocument doc) async {
+  Future<void> _openDocument(
+    BuildContext context,
+    ChildDocument doc,
+    ValueChanged<ChildDocument> onEdit,
+  ) async {
     final path = doc.filePath;
     if (path == null || path.isEmpty) {
-      showAppFeedback(
-        context,
-        message: "This document hasn't been captured yet. Add it from registration.",
-        kind: AppFeedbackKind.info,
-      );
+      // Nothing on disk yet — offer to attach the file right here instead
+      // of bouncing the user back to the registration flow.
+      onEdit(doc);
       return;
     }
 
@@ -947,7 +1189,7 @@ class _DocumentsTab extends StatelessWidget {
       actionLabel: result.type == ResultType.fileNotFound ? null : 'Retry',
       onAction: result.type == ResultType.fileNotFound
           ? null
-          : () => _openDocument(context, doc),
+          : () => _openDocument(context, doc, onEdit),
     );
   }
 }
@@ -1062,7 +1304,15 @@ class _AttendanceTab extends StatelessWidget {
 
 class _PaymentsTab extends StatelessWidget {
   final Child child;
-  const _PaymentsTab({required this.child});
+  final VoidCallback onAdd;
+  final ValueChanged<PaymentRecord> onEdit;
+  final ValueChanged<PaymentRecord> onDelete;
+  const _PaymentsTab({
+    required this.child,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   (Color, Color, String) _statusDisplay(PaymentRecord p) {
     if (p.status == PaymentStatus.paid) {
@@ -1079,15 +1329,36 @@ class _PaymentsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (child.payments.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Text('No payments recorded yet', style: AppText.caption),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('PAYMENTS', style: AppText.monoLabel),
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+              ),
+            ),
+          ],
         ),
-      );
-    }
-    return Container(
+        const SizedBox(height: 8),
+        if (child.payments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Text(
+              'No payments recorded yet. Tap Add to log one.',
+              style: AppText.caption,
+            ),
+          )
+        else
+          Container(
       decoration: cardDecoration(),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1095,7 +1366,9 @@ class _PaymentsTab extends StatelessWidget {
           final p = child.payments[i];
           final isLast = i == child.payments.length - 1;
           final (bg, fg, label) = _statusDisplay(p);
-          return Container(
+          return InkWell(
+            onTap: () => onEdit(p),
+            child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
               border: isLast
@@ -1135,11 +1408,28 @@ class _PaymentsTab extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(width: 8),
+                PopupMenuButton<String>(
+                  tooltip: 'Payment actions',
+                  icon: const Icon(Icons.more_vert,
+                      size: 18, color: AppColors.mutedForeground),
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit(p);
+                    if (value == 'delete') onDelete(p);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(value: 'delete', child: Text('Remove')),
+                  ],
+                ),
               ],
             ),
+          ),
           );
         }),
       ),
+    ),
+      ],
     );
   }
 }

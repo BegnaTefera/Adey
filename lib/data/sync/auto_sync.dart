@@ -112,7 +112,9 @@ class AutoSync with WidgetsBindingObserver {
 
     _running = true;
     try {
-      final result = await SyncClient.instance.syncNow();
+      // background: true — an automatic run must not flip the UI into the
+      // "syncing" state, or the indicator flashes every few seconds.
+      final result = await SyncClient.instance.syncNow(background: true);
       if (result.ok) {
         _failures = 0;
         // The import just refreshed every store; don't read that as a new

@@ -82,13 +82,20 @@ class SyncClient {
   }
 
   /// Full sync pass: ping → pull → push → file transfers.
+  ///
+  /// [background] marks an automatic (auto-sync) run: it must not flip the
+  /// UI into the "syncing" state, or the spinner flashes every few seconds.
+  /// Failures are still recorded so the status indicator stays truthful.
   Future<bool> performSync({
     required String serverIp,
     int port = 8080,
     required String pairingCode,
     DateTime? lastSyncTime,
+    bool background = false,
   }) async {
-    SyncService.instance.setRunStatus(SyncRunStatus.syncing);
+    if (!background) {
+      SyncService.instance.setRunStatus(SyncRunStatus.syncing);
+    }
     try {
       final ping = await pingServer(
         serverIp: serverIp,
@@ -179,19 +186,19 @@ class SyncClient {
   /// duplicate pull/push against the same desktop.
   Future<SyncResult>? _activeRun;
 
-  Future<SyncResult> syncNow() {
+  Future<SyncResult> syncNow({bool background = false}) {
     final running = _activeRun;
     if (running != null) return running;
 
     late final Future<SyncResult> run;
-    run = _syncNow().whenComplete(() {
+    run = _syncNow(background: background).whenComplete(() {
       if (identical(_activeRun, run)) _activeRun = null;
     });
     _activeRun = run;
     return run;
   }
 
-  Future<SyncResult> _syncNow() async {
+  Future<SyncResult> _syncNow({bool background = false}) async {
   final settings = SettingsStore.instance;
 
   final serverIp = settings.syncServerIp.trim();
@@ -215,6 +222,7 @@ class SyncClient {
     serverIp: serverIp,
     port: settings.syncServerPort,
     pairingCode: pairingCode,
+    background: background,
   );
 
   return SyncResult(

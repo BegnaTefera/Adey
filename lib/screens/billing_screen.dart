@@ -20,6 +20,7 @@ class BillingScreen extends StatefulWidget {
 
 class _BillingScreenState extends State<BillingScreen> {
   bool _showOverdueOnly = false;
+  final Set<String> _expandedFeeTypes = {};
 
   @override
   void initState() {
@@ -145,60 +146,94 @@ class _BillingScreenState extends State<BillingScreen> {
             )
           else
             ...feeTypes.map(
-            (fee) => Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: cardDecoration(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(fee.name, style: AppText.bodyMedium),
-                      ),
-                      Text(
-                        fee.chargeOnRegistration
-                            ? 'At registration'
-                            : fee.recurring
-                                ? 'Recurring'
-                                : 'One-off',
-                        style: AppText.caption,
-                      ),
-                      IconButton(
-                        tooltip: 'Delete ${fee.name}',
-                        onPressed: () => _deleteFeeType(fee),
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: AppColors.danger,
+            (fee) {
+              final expanded = _expandedFeeTypes.contains(fee.id);
+              final kindLabel = fee.chargeOnRegistration
+                  ? 'At registration'
+                  : fee.recurring
+                      ? 'Recurring'
+                      : 'One-off';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: cardDecoration(),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: () => setState(() {
+                        if (expanded) {
+                          _expandedFeeTypes.remove(fee.id);
+                        } else {
+                          _expandedFeeTypes.add(fee.id);
+                        }
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(fee.name, style: AppText.bodyMedium),
+                                  const SizedBox(height: 2),
+                                  Text(kindLabel, style: AppText.caption),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Delete ${fee.name}',
+                              onPressed: () => _deleteFeeType(fee),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: AppColors.danger,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Edit ${fee.name}',
+                              onPressed: () => _editFeeType(fee),
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                            Icon(
+                              expanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: AppColors.mutedForeground,
+                            ),
+                          ],
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Edit ${fee.name}',
-                        onPressed: () => _editFeeType(fee),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ...fee.rates.map(
-                    (bracket) => Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(bracket.label, style: AppText.caption),
-                          Text(
-                            formatEtb(bracket.rate),
-                            style: AppText.bodyMedium.copyWith(color: AppColors.primary),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                    if (expanded)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Column(
+                          children: [
+                            ...fee.rates.map(
+                              (bracket) => Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(bracket.label, style: AppText.caption),
+                                    Text(
+                                      formatEtb(bracket.rate),
+                                      style: AppText.bodyMedium.copyWith(
+                                          color: AppColors.primary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
           if (feeTypes.isNotEmpty) const SizedBox(height: 16),
           Row(

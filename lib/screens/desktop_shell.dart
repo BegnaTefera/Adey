@@ -12,6 +12,7 @@ import 'dashboard_screen.dart';
 import 'expenses_screen.dart';
 import 'print_queue_screen.dart';
 import 'register_screen.dart';
+import 'reports_screen.dart';
 import 'settings_screen.dart';
 
 enum _DesktopTab {
@@ -20,6 +21,7 @@ enum _DesktopTab {
   printQueue,
   attendance,
   billing,
+  reports,
   expenses,
   settings,
 }
@@ -178,6 +180,13 @@ class _DesktopShellState extends State<DesktopShell> {
                         onTap: () => setState(() => _activeTab = _DesktopTab.billing),
                       ),
                       _SidebarItem(
+                        icon: Icons.stacked_bar_chart_outlined,
+                        activeIcon: Icons.stacked_bar_chart,
+                        label: 'Reports',
+                        active: _activeTab == _DesktopTab.reports,
+                        onTap: () => setState(() => _activeTab = _DesktopTab.reports),
+                      ),
+                      _SidebarItem(
                         icon: Icons.payments_outlined,
                         activeIcon: Icons.payments,
                         label: 'Expenses',
@@ -210,6 +219,7 @@ class _DesktopShellState extends State<DesktopShell> {
                     _DesktopTab.printQueue => const PrintQueueScreen(),
                     _DesktopTab.attendance => const AttendanceScreen(),
                     _DesktopTab.billing => const BillingScreen(),
+                    _DesktopTab.reports => const ReportsScreen(),
                     _DesktopTab.expenses => const ExpensesScreen(),
                     _DesktopTab.settings => const SettingsScreen(),
                   },

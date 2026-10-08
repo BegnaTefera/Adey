@@ -253,6 +253,8 @@ class SyncServer extends ChangeNotifier {
     final docs = payload.tables['documents'] ?? [];
     final missing = <String>[];
     for (final row in docs) {
+      // Deleted rows are tombstones — their bytes are pointless to fetch.
+      if (row['deleted'] == 1) continue;
       final hash = row['sha256'] as String?;
       if (hash == null || hash.isEmpty) continue;
       if (!await DocumentStorage.hasBytesForHash(hash)) {

@@ -82,6 +82,31 @@ class Guardian {
         'updated_at': DateTime.now().toIso8601String(),
       };
 
+  Guardian copyWith({
+    String? name,
+    String? relationship,
+    String? phone,
+    String? email,
+    bool? isPrimary,
+    bool? authorizedPickup,
+    String? subCity,
+    String? woreda,
+    String? houseNumber,
+  }) {
+    return Guardian(
+      id: id,
+      name: name ?? this.name,
+      relationship: relationship ?? this.relationship,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      isPrimary: isPrimary ?? this.isPrimary,
+      authorizedPickup: authorizedPickup ?? this.authorizedPickup,
+      subCity: subCity ?? this.subCity,
+      woreda: woreda ?? this.woreda,
+      houseNumber: houseNumber ?? this.houseNumber,
+    );
+  }
+
   factory Guardian.fromMap(Map<String, dynamic> map) => Guardian(
         id: map['id'] as String,
         name: map['name'] as String,
@@ -117,14 +142,21 @@ class ChildDocument {
     this.printed = true,
   });
 
-  ChildDocument copyWith({bool? printed, String? filePath}) => ChildDocument(
+  ChildDocument copyWith({
+    String? label,
+    DocumentType? type,
+    DocumentStatus? status,
+    bool? printed,
+    String? filePath,
+    String? sha256,
+  }) => ChildDocument(
         id: id,
-        label: label,
-        type: type,
+        label: label ?? this.label,
+        type: type ?? this.type,
         uploadedAt: uploadedAt,
-        status: status,
+        status: status ?? this.status,
         filePath: filePath ?? this.filePath,
-        sha256: sha256,
+        sha256: sha256 ?? this.sha256,
         printed: printed ?? this.printed,
       );
 
@@ -217,16 +249,25 @@ class PaymentRecord {
       status == PaymentStatus.pending &&
       DateTime.now().isAfter(dueDate.add(const Duration(days: overdueGraceDays)));
 
-  PaymentRecord copyWith({PaymentStatus? status, DateTime? paidAt}) {
+  PaymentRecord copyWith({
+    String? feeTypeName,
+    String? description,
+    double? amount,
+    PaymentStatus? status,
+    DateTime? dueDate,
+    DateTime? paidAt,
+    bool clearPaidAt = false,
+    String? cycleLabel,
+  }) {
     return PaymentRecord(
       id: id,
-      feeTypeName: feeTypeName,
-      description: description,
-      amount: amount,
+      feeTypeName: feeTypeName ?? this.feeTypeName,
+      description: description ?? this.description,
+      amount: amount ?? this.amount,
       status: status ?? this.status,
-      dueDate: dueDate,
-      paidAt: paidAt ?? this.paidAt,
-      cycleLabel: cycleLabel,
+      dueDate: dueDate ?? this.dueDate,
+      paidAt: clearPaidAt ? null : (paidAt ?? this.paidAt),
+      cycleLabel: cycleLabel ?? this.cycleLabel,
     );
   }
 
@@ -300,28 +341,39 @@ class Child {
   });
 
   Child copyWith({
+    String? firstName,
+    String? lastName,
+    Gender? gender,
+    DateTime? dob,
+    List<String>? allergies,
+    String? healthCondition,
+    String? dietaryNotes,
+    String? specialCharacteristics,
+    List<Guardian>? guardians,
     List<ChildDocument>? documents,
     List<AttendanceRecord>? attendance,
     List<PaymentRecord>? payments,
     bool? synced,
     List<AuthorizedPickup>? additionalPickupPeople,
     EnrollmentStatus? enrollmentStatus,
+    DateTime? enrolledSince,
     int? billingDayOverride,
   }) {
     return Child(
       id: id,
-      firstName: firstName,
-      lastName: lastName,
-      gender: gender,
-      dob: dob,
-      allergies: allergies,
-      healthCondition: healthCondition,
-      dietaryNotes: dietaryNotes,
-      specialCharacteristics: specialCharacteristics,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      gender: gender ?? this.gender,
+      dob: dob ?? this.dob,
+      allergies: allergies ?? this.allergies,
+      healthCondition: healthCondition ?? this.healthCondition,
+      dietaryNotes: dietaryNotes ?? this.dietaryNotes,
+      specialCharacteristics:
+          specialCharacteristics ?? this.specialCharacteristics,
       enrollmentStatus: enrollmentStatus ?? this.enrollmentStatus,
-      enrolledSince: enrolledSince,
+      enrolledSince: enrolledSince ?? this.enrolledSince,
       billingDayOverride: billingDayOverride ?? this.billingDayOverride,
-      guardians: guardians,
+      guardians: guardians ?? this.guardians,
       documents: documents ?? this.documents,
       attendance: attendance ?? this.attendance,
       payments: payments ?? this.payments,

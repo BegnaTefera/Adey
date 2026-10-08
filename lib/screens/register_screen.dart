@@ -832,7 +832,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     border: Border.all(color: AppColors.border),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: CustomPaint(painter: _SignaturePainter(_signatureStrokes)),
+                  child: CustomPaint(
+                    painter: _SignaturePainter(
+                      _signatureStrokes,
+                      sourceSize: _signatureAreaSize,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1154,10 +1159,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           specialCharacteristics: _specialController.text.trim(),
           pickupPeople: List.of(_pickupPeople),
           agreementText: _agreementText,
-            guardianPhotoBytes: guardianPhotoBytes,
-            childPhotoBytes: childPhotoBytes,
-            guardianPhotoLabel:
-              _guardianRelationship == 'Father' ? 'Father' : 'Guardian',
+          guardianPhotoBytes: guardianPhotoBytes,
+          childPhotoBytes: childPhotoBytes,
           signatureStrokes: _signatureStrokes,
           signatureAreaSize: _signatureAreaSize,
           signedAt: now,
@@ -1757,10 +1760,24 @@ class _DocumentButton extends StatelessWidget {
 class _SignaturePainter extends CustomPainter {
   final List<List<ui.Offset>> strokes;
 
-  _SignaturePainter(this.strokes);
+  /// The size of the pad the strokes were captured on. When the painter is
+  /// asked to draw into a differently-sized box (the smaller preview
+  /// rendition), points are scaled to fit instead of overflowing.
+  final ui.Size? sourceSize;
+
+  _SignaturePainter(this.strokes, {this.sourceSize});
 
   @override
   void paint(ui.Canvas canvas, ui.Size size) {
+    final source = sourceSize;
+    final scaleX = (source != null && source.width > 0)
+        ? size.width / source.width
+        : 1.0;
+    final scaleY = (source != null && source.height > 0)
+        ? size.height / source.height
+        : 1.0;
+    ui.Offset map(ui.Offset p) => ui.Offset(p.dx * scaleX, p.dy * scaleY);
+
     final strokePaint = Paint()
       ..color = AppColors.foreground
       ..style = PaintingStyle.stroke
@@ -1776,26 +1793,30 @@ class _SignaturePainter extends CustomPainter {
       if (stroke.isEmpty) continue;
       if (stroke.length == 1) {
         // A tap with no drag — draw a small dot so it's not invisible.
-        canvas.drawCircle(stroke.first, strokePaint.strokeWidth / 2, dotPaint);
+        canvas.drawCircle(map(stroke.first), strokePaint.strokeWidth / 2, dotPaint);
         continue;
       }
       if (stroke.length == 2) {
-        canvas.drawLine(stroke[0], stroke[1], strokePaint);
+        canvas.drawLine(map(stroke[0]), map(stroke[1]), strokePaint);
         continue;
       }
       // Smooth the raw touch points into a curve: each point becomes the
       // control point of a quadratic Bezier ending at the midpoint to
       // the next point. Straight lineTo segments between raw points is
       // what makes freehand strokes look jagged — this rounds them out.
-      final path = ui.Path()..moveTo(stroke[0].dx, stroke[0].dy);
+      final first = map(stroke[0]);
+      final path = ui.Path()..moveTo(first.dx, first.dy);
       for (var i = 1; i < stroke.length - 1; i++) {
+        final control = map(stroke[i]);
+        final next = map(stroke[i + 1]);
         final midpoint = ui.Offset(
-          (stroke[i].dx + stroke[i + 1].dx) / 2,
-          (stroke[i].dy + stroke[i + 1].dy) / 2,
+          (control.dx + next.dx) / 2,
+          (control.dy + next.dy) / 2,
         );
-        path.quadraticBezierTo(stroke[i].dx, stroke[i].dy, midpoint.dx, midpoint.dy);
+        path.quadraticBezierTo(control.dx, control.dy, midpoint.dx, midpoint.dy);
       }
-      path.lineTo(stroke.last.dx, stroke.last.dy);
+      final last = map(stroke.last);
+      path.lineTo(last.dx, last.dy);
       canvas.drawPath(path, strokePaint);
     }
   }

@@ -236,6 +236,8 @@ class SyncService extends ChangeNotifier {
     for (final id in applied['documents'] ?? const <String>{}) {
       final doc = await db.query('documents', where: 'id = ?', whereArgs: [id]);
       if (doc.isEmpty) continue;
+      // A tombstone has no bytes worth fetching.
+      if (doc.first['deleted'] == 1) continue;
       final hash = doc.first['sha256'] as String?;
       if (!DocumentStorage.isValidHash(hash)) continue;
       final path = await DocumentStorage.localPathForHash(hash!);
@@ -485,7 +487,7 @@ class SyncService extends ChangeNotifier {
     final rows = await db.query(
       'documents',
       columns: ['sha256'],
-      where: "sha256 IS NOT NULL AND sha256 != ''",
+      where: "sha256 IS NOT NULL AND sha256 != '' AND deleted = 0",
     );
     final missing = <String>{};
     for (final row in rows) {
