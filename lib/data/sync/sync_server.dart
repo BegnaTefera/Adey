@@ -7,18 +7,20 @@ import 'sync_models.dart';
 import 'sync_service.dart';
 
 /// Embedded desktop HTTP server for LAN synchronization.
-class SyncServer {
+class SyncServer extends ChangeNotifier {
   SyncServer._internal();
   static final SyncServer instance = SyncServer._internal();
 
   HttpServer? _server;
   bool _running = false;
   int _port = 8080;
+  String? _lastError;
   final Set<String> _connectedIpsToday = {};
   String _connectionDay = '';
 
   bool get isRunning => _running;
   int get port => _port;
+  String? get lastError => _lastError;
   String get pairingCode => SettingsStore.instance.desktopPairingCode;
   int get devicesConnectedToday => _connectedIpsToday.length;
 
@@ -47,12 +49,16 @@ class SyncServer {
       _port = port;
       _server = await HttpServer.bind(InternetAddress.anyIPv4, _port);
       _running = true;
+      _lastError = null;
       _server!.listen(_handleRequest);
       debugPrint('SyncServer started on port $_port');
+      notifyListeners();
       return true;
     } catch (e) {
       debugPrint('Failed to start SyncServer: $e');
       _running = false;
+      _lastError = e.toString();
+      notifyListeners();
       return false;
     }
   }
@@ -64,6 +70,7 @@ class SyncServer {
     }
     _running = false;
     debugPrint('SyncServer stopped.');
+    notifyListeners();
   }
 
   void _recordConnection(HttpRequest request) {
@@ -72,7 +79,12 @@ class SyncServer {
       _connectionDay = today;
       _connectedIpsToday.clear();
     }
-    _connectedIpsToday.add(request.connectionInfo?.remoteAddress.address ?? 'unknown');
+    final added = _connectedIpsToday.add(
+      request.connectionInfo?.remoteAddress.address ?? 'unknown',
+    );
+    if (added) {
+      notifyListeners();
+    }
   }
 
   bool _isAuthorized(HttpRequest request, String path) {
@@ -89,7 +101,10 @@ class SyncServer {
 
     request.response.headers.set('Access-Control-Allow-Origin', '*');
     request.response.headers.set('Access-Control-Allow-Headers', '*');
-    request.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    request.response.headers.set(
+      'Access-Control-Allow-Methods',
+      'GET, POST, OPTIONS',
+    );
 
     if (method == 'OPTIONS') {
       request.response.statusCode = HttpStatus.ok;
@@ -109,29 +124,37 @@ class SyncServer {
     try {
       if (path == '/ping') {
         request.response.headers.contentType = ContentType.json;
-        request.response.write(jsonEncode({
-          'status': 'ok',
-          'deviceName': 'Adey Desktop Server',
-          'paired': true,
-        }));
+        request.response.write(
+          jsonEncode({
+            'status': 'ok',
+            'deviceName': 'Adey Desktop Server',
+            'paired': true,
+          }),
+        );
       } else if (path == '/changes' && method == 'GET') {
         final sinceStr = request.uri.queryParameters['since'];
         final since = sinceStr != null ? DateTime.tryParse(sinceStr) : null;
-        final payload = await SyncService.instance.exportChanges(since: since);
+        final payload = await SyncService.instance.exportChanges(
+          since: since,
+        );
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode(payload.toJson()));
       } else if (path == '/changes' && method == 'POST') {
         final bodyText = await utf8.decoder.bind(request).join();
         final json = jsonDecode(bodyText) as Map<String, dynamic>;
         final incomingPayload = SyncPayload.fromJson(json);
-        final result = await SyncService.instance.importChanges(incomingPayload);
+        final result = await SyncService.instance.importChanges(
+          incomingPayload,
+        );
         await _storeIncomingFiles(result.missingHashes, incomingPayload);
         request.response.headers.contentType = ContentType.json;
-        request.response.write(jsonEncode({
-          'status': 'ok',
-          'conflicts': result.conflictCount,
-          'missing_hashes': await _missingHashesForPayload(incomingPayload),
-        }));
+        request.response.write(
+          jsonEncode({
+            'status': 'ok',
+            'conflicts': result.conflictCount,
+            'missing_hashes': await _missingHashesForPayload(incomingPayload),
+          }),
+        );
       } else if (path == '/file' && method == 'GET') {
         final hash = request.uri.queryParameters['hash'];
         if (hash == null) {
@@ -159,7 +182,10 @@ class SyncServer {
             chunks.addAll(chunk);
           }
           final bytes = Uint8List.fromList(chunks);
-          final (savedPath, _) = await DocumentStorage.saveByHash(bytes: bytes, hash: hash);
+          final (savedPath, _) = await DocumentStorage.saveByHash(
+            bytes: bytes,
+            hash: hash,
+          );
           await SyncService.instance.attachDownloadedFile(hash, savedPath);
           request.response.statusCode = HttpStatus.ok;
         }
@@ -192,8 +218,9 @@ class SyncServer {
     List<String> missingHashes,
     SyncPayload payload,
   ) async {
-    // Server-side import already flagged missing hashes; client uploads via POST /file.
     if (missingHashes.isEmpty) return;
-    debugPrint('SyncServer waiting for ${missingHashes.length} file upload(s).');
+    debugPrint(
+      'SyncServer waiting for ${missingHashes.length} file upload(s).',
+    );
   }
 }
