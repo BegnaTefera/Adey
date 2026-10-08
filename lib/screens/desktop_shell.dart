@@ -1,17 +1,28 @@
 import 'package:flutter/material.dart';
+import '../data/children_store.dart';
 import '../data/fee_types_store.dart';
-import '../data/sync/sync_service.dart';
+import '../data/print_queue.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/conflict_banner.dart';
 import '../theme/app_theme.dart';
 import 'attendance_screen.dart';
 import 'billing_screen.dart';
 import 'children_screen.dart';
 import 'dashboard_screen.dart';
 import 'expenses_screen.dart';
+import 'print_queue_screen.dart';
 import 'register_screen.dart';
 import 'settings_screen.dart';
 
-enum _DesktopTab { dashboard, children, attendance, billing, expenses, settings }
+enum _DesktopTab {
+  dashboard,
+  children,
+  printQueue,
+  attendance,
+  billing,
+  expenses,
+  settings,
+}
 
 class DesktopShell extends StatefulWidget {
   const DesktopShell({super.key});
@@ -26,17 +37,18 @@ class _DesktopShellState extends State<DesktopShell> {
   @override
   void initState() {
     super.initState();
-    SyncService.instance.addListener(_onSyncChanged);
-    SyncService.instance.init();
+    // The sidebar's print-queue badge follows the children data, which a
+    // sync from the phone or a print on this screen both change.
+    ChildrenStore.instance.addListener(_onDataChanged);
   }
 
   @override
   void dispose() {
-    SyncService.instance.removeListener(_onSyncChanged);
+    ChildrenStore.instance.removeListener(_onDataChanged);
     super.dispose();
   }
 
-  void _onSyncChanged() {
+  void _onDataChanged() {
     if (mounted) setState(() {});
   }
 
@@ -61,7 +73,7 @@ class _DesktopShellState extends State<DesktopShell> {
 
   @override
   Widget build(BuildContext context) {
-    final conflicts = SyncService.instance.conflicts;
+    final printQueueCount = buildPrintQueue(ChildrenStore.instance.children).length;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -144,6 +156,14 @@ class _DesktopShellState extends State<DesktopShell> {
                         onTap: () => setState(() => _activeTab = _DesktopTab.children),
                       ),
                       _SidebarItem(
+                        icon: Icons.print_outlined,
+                        activeIcon: Icons.print,
+                        label: 'Print Queue',
+                        badgeCount: printQueueCount,
+                        active: _activeTab == _DesktopTab.printQueue,
+                        onTap: () => setState(() => _activeTab = _DesktopTab.printQueue),
+                      ),
+                      _SidebarItem(
                         icon: Icons.calendar_today_outlined,
                         activeIcon: Icons.calendar_today,
                         label: 'Attendance',
@@ -182,35 +202,12 @@ class _DesktopShellState extends State<DesktopShell> {
           Expanded(
             child: Column(
               children: [
-                if (conflicts.isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    color: AppColors.dangerSoft,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Sync Conflict: ${conflicts.length} payment record(s) need review.',
-                            style: AppText.bodyMedium.copyWith(
-                              color: AppColors.danger,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => _showConflictsDialog(context),
-                          child: const Text('Review Conflicts'),
-                        ),
-                      ],
-                    ),
-                  ),
+                const ConflictBanner(),
                 Expanded(
                   child: switch (_activeTab) {
                     _DesktopTab.dashboard => const DashboardScreen(),
                     _DesktopTab.children => const ChildrenScreen(),
+                    _DesktopTab.printQueue => const PrintQueueScreen(),
                     _DesktopTab.attendance => const AttendanceScreen(),
                     _DesktopTab.billing => const BillingScreen(),
                     _DesktopTab.expenses => const ExpensesScreen(),
@@ -224,70 +221,6 @@ class _DesktopShellState extends State<DesktopShell> {
       ),
     );
   }
-
-  void _showConflictsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final conflicts = SyncService.instance.conflicts;
-        return AlertDialog(
-          title: const Text('Resolve Sync Conflicts'),
-          content: SizedBox(
-            width: 500,
-            height: 350,
-            child: ListView.builder(
-              itemCount: conflicts.length,
-              itemBuilder: (_, i) {
-                final c = conflicts[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Conflict in ${c.tableName} (ID: ${c.entityId})', style: AppText.bodyMedium),
-                        const SizedBox(height: 6),
-                        Text('Local: ${c.localData}', style: AppText.caption),
-                        Text('Remote: ${c.remoteData}', style: AppText.caption),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () async {
-                                await SyncService.instance.resolveConflict(c, keepLocal: true);
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              },
-                              child: const Text('Keep Local'),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: () async {
-                                await SyncService.instance.resolveConflict(c, keepLocal: false);
-                                if (ctx.mounted) Navigator.pop(ctx);
-                              },
-                              child: const Text('Accept Remote'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _SidebarItem extends StatelessWidget {
@@ -296,6 +229,7 @@ class _SidebarItem extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final int badgeCount;
 
   const _SidebarItem({
     required this.icon,
@@ -303,6 +237,7 @@ class _SidebarItem extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
@@ -332,6 +267,29 @@ class _SidebarItem extends StatelessWidget {
                     fontWeight: active ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
+                if (badgeCount > 0) ...[
+                  const Spacer(),
+                  // Same pattern as a notification badge: a small red pill
+                  // with the count, so waiting forms get noticed without
+                  // opening the screen.
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '$badgeCount',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

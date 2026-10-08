@@ -50,15 +50,27 @@ class _AppStartupState extends State<_AppStartup> {
   }
 
   void _initialize() {
-    _initFuture = Future.wait([
+    _initFuture = _boot();
+  }
+
+  Future<void> _boot() async {
+    // Settings first: date formatting, the device id and the pairing code
+    // all depend on them.
+    await SettingsStore.instance.init();
+    await Future.wait([
       ChildrenStore.instance.init(),
       ExpensesStore.instance.init(),
       FeeTypesStore.instance.init(),
-      SettingsStore.instance.init(),
       SyncService.instance.init(),
-      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
-        SyncServer.instance.start(),
     ]);
+    // Desktop is the sync server. It listens from app open (if it hasn't
+    // been switched off in Settings) — no timers, the phone does the
+    // calling. A failure to bind a port is shown in Settings/dashboard
+    // rather than blocking the app.
+    if (SettingsStore.instance.isDesktop &&
+        SettingsStore.instance.syncServerEnabled) {
+      await SyncServer.instance.start();
+    }
   }
 
   @override

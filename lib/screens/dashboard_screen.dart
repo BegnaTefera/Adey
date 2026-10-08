@@ -3,6 +3,7 @@ import '../data/children_store.dart';
 import '../data/formatters.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
+import '../widgets/sync_status_card.dart';
 import 'attendance_screen.dart';
 import 'billing_screen.dart';
 import 'expenses_screen.dart';
@@ -301,46 +302,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 16),
 
-            // Sync status card
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: cardDecoration(),
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.sync,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Local SQLite', style: AppText.bodyMedium),
-                        Text('Changes are saved on this device',
-                            style: AppText.caption),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.syncSoft,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text('Live',
-                        style: AppText.monoCaption.copyWith(
-                            color: AppColors.sync,
-                            fontWeight: FontWeight.w600)),
-                  ),
-                ],
-              ),
-            ),
+            // Sync status: client view on mobile, server view on desktop.
+            const SyncStatusCard(),
           ],
         ),
       );

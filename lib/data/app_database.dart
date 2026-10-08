@@ -27,7 +27,7 @@ class AppDatabase {
     final path = join(dbPath, 'daycare.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -200,6 +200,25 @@ class AppDatabase {
           await db.rawUpdate(
             "UPDATE documents SET printed = 0 WHERE type = 'registration'",
           );
+        }
+        if (oldVersion < 4) {
+          // Databases that predate sync may lack these tables.
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS sync_conflicts (
+              id TEXT PRIMARY KEY,
+              table_name TEXT NOT NULL,
+              entity_id TEXT NOT NULL,
+              local_json TEXT NOT NULL,
+              remote_json TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            )
+          ''');
         }
       },
     );

@@ -98,40 +98,151 @@ class ChildrenRepository {
     });
   }
 
-  /// Replaces an existing child's row and all nested rows. Nested
-  /// tables are cleared and rewritten rather than diffed — simple and
-  /// correct for this app's scale (a few hundred records, not
-  /// thousands of attendance rows per child).
+  /// Writes an existing child's row and reconciles all nested rows.
+  ///
+  /// Nested rows are diffed rather than cleared and rewritten: only rows
+  /// whose content actually changed get a fresh `updated_at`, and rows
+  /// that are gone from the model are deleted. This matters for sync —
+  /// "newest `updated_at` wins" only means something if untouched rows
+  /// keep their old timestamps instead of all being restamped with the
+  /// time of whatever small edit happened to rewrite the child.
   Future<void> update(Child child) async {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
-      await txn.update(
+      final now = DateTime.now().toIso8601String();
+
+      final childRow = await _childRow(txn, child);
+      final existingChild = await txn.query(
         'children',
-        await _childRow(txn, child),
         where: 'id = ?',
         whereArgs: [child.id],
       );
-
-      await txn.delete('guardians', where: 'child_id = ?', whereArgs: [child.id]);
-      for (final g in child.guardians) {
-        await txn.insert('guardians', g.toMap(child.id));
+      if (existingChild.isEmpty) {
+        await txn.insert('children', childRow);
+      } else {
+        await _writeIfChanged(
+          txn,
+          'children',
+          existingChild.first,
+          childRow,
+          now,
+          localOnlyKeys: const {'synced'},
+        );
       }
 
-      await txn.delete('documents', where: 'child_id = ?', whereArgs: [child.id]);
-      for (final d in child.documents) {
-        await txn.insert('documents', d.toMap(child.id));
-      }
-
-      await txn.delete('attendance', where: 'child_id = ?', whereArgs: [child.id]);
-      for (final a in child.attendance) {
-        await txn.insert('attendance', a.toMap(child.id));
-      }
-
-      await txn.delete('payments', where: 'child_id = ?', whereArgs: [child.id]);
-      for (final p in child.payments) {
-        await txn.insert('payments', p.toMap(child.id));
-      }
+      await _reconcileNested(
+        txn,
+        'guardians',
+        child.id,
+        child.guardians.map((g) => g.toMap(child.id)).toList(),
+        now,
+      );
+      await _reconcileNested(
+        txn,
+        'documents',
+        child.id,
+        child.documents.map((d) => d.toMap(child.id)).toList(),
+        now,
+        localOnlyKeys: const {'file_path'},
+      );
+      await _reconcileNested(
+        txn,
+        'attendance',
+        child.id,
+        child.attendance.map((a) => a.toMap(child.id)).toList(),
+        now,
+      );
+      await _reconcileNested(
+        txn,
+        'payments',
+        child.id,
+        child.payments.map((p) => p.toMap(child.id)).toList(),
+        now,
+      );
     });
+  }
+
+  Future<void> _reconcileNested(
+    DatabaseExecutor txn,
+    String table,
+    String childId,
+    List<Map<String, dynamic>> rows,
+    String now, {
+    Set<String> localOnlyKeys = const {},
+  }) async {
+    final existingRows = await txn.query(
+      table,
+      where: 'child_id = ?',
+      whereArgs: [childId],
+    );
+    final existingById = {
+      for (final row in existingRows) row['id'] as String: row,
+    };
+    final keepIds = <String>{};
+
+    for (final row in rows) {
+      final id = row['id'] as String;
+      keepIds.add(id);
+      final existing = existingById[id];
+      if (existing == null) {
+        row['updated_at'] = now;
+        await txn.insert(table, row);
+      } else {
+        await _writeIfChanged(
+          txn,
+          table,
+          existing,
+          row,
+          now,
+          localOnlyKeys: localOnlyKeys,
+        );
+      }
+    }
+
+    for (final id in existingById.keys) {
+      if (!keepIds.contains(id)) {
+        await txn.delete(table, where: 'id = ?', whereArgs: [id]);
+      }
+    }
+  }
+
+  /// Updates [table] only if [next] differs from [existing]. A change to
+  /// shared content restamps `updated_at`; a change only to
+  /// [localOnlyKeys] (device-local bookkeeping such as a file path) is
+  /// saved without restamping, so it doesn't look like a new edit to sync.
+  Future<void> _writeIfChanged(
+    DatabaseExecutor txn,
+    String table,
+    Map<String, Object?> existing,
+    Map<String, dynamic> next,
+    String now, {
+    Set<String> localOnlyKeys = const {},
+  }) async {
+    final sharedChanged =
+        _differs(existing, next, {'updated_at', ...localOnlyKeys});
+    final anyChanged = _differs(existing, next, {'updated_at'});
+    if (!anyChanged) return;
+
+    final row = Map<String, dynamic>.from(next);
+    row['updated_at'] =
+        sharedChanged ? now : (existing['updated_at'] ?? now);
+    await txn.update(table, row, where: 'id = ?', whereArgs: [existing['id']]);
+  }
+
+  bool _differs(
+    Map<String, Object?> existing,
+    Map<String, dynamic> next,
+    Set<String> ignore,
+  ) {
+    for (final entry in next.entries) {
+      if (ignore.contains(entry.key)) continue;
+      final a = existing[entry.key];
+      final b = entry.value;
+      if (a == b) continue;
+      if (a is num && b is num && (a - b).abs() < 1e-9) continue;
+      return true;
+    }
+    return false;
   }
 
   Future<int> count() async {

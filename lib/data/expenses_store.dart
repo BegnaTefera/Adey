@@ -24,6 +24,9 @@ class ExpensesStore extends ChangeNotifier {
     _initialized = true;
   }
 
+  /// Forces a re-read from SQLite (used after a sync merge).
+  Future<void> refresh() => _refresh();
+
   Future<void> addExpense(ExpenseItem expense) async {
     final db = await AppDatabase.instance.database;
     await db.insert('expenses', expense.toMap());

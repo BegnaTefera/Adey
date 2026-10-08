@@ -13,6 +13,7 @@ import '../data/children_store.dart';
 import '../data/document_storage.dart';
 import '../data/formatters.dart';
 import '../data/registration_pdf.dart';
+import '../data/settings_store.dart';
 import '../models/child.dart';
 import '../models/authorized_pickup.dart';
 import '../theme/app_theme.dart';
@@ -1174,7 +1175,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         status: DocumentStatus.onFile,
         filePath: pdfPath,
         sha256: pdfHash,
-        printed: false,
+        // Made on desktop → she's next to the printer, nothing to queue.
+        // Made on the phone → it needs a first print at the desktop.
+        printed: SettingsStore.instance.isDesktop,
       ));
 
       final child = Child(

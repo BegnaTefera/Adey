@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../document_storage.dart';
 import '../settings_store.dart';
@@ -42,7 +41,7 @@ class SyncClient {
     required String pairingCode,
     DateTime? lastSyncTime,
   }) async {
-    await SyncService.instance.setRunStatus(SyncRunStatus.syncing);
+    SyncService.instance.setRunStatus(SyncRunStatus.syncing);
     try {
       final ping = await pingServer(
         serverIp: serverIp,
@@ -50,7 +49,7 @@ class SyncClient {
         pairingCode: pairingCode,
       );
       if (ping == null || ping['paired'] != true) {
-        await SyncService.instance.setRunStatus(
+        SyncService.instance.setRunStatus(
           SyncRunStatus.failed,
           error: 'Could not verify pairing with desktop.',
         );
@@ -67,7 +66,7 @@ class SyncClient {
       pullReq.headers.set('X-Pairing-Code', pairingCode);
       final pullRes = await pullReq.close();
       if (pullRes.statusCode != 200) {
-        await SyncService.instance.setRunStatus(SyncRunStatus.failed, error: 'Pull failed.');
+        SyncService.instance.setRunStatus(SyncRunStatus.failed, error: 'Pull failed.');
         return false;
       }
       final pullBody = await pullRes.transform(utf8.decoder).join();
@@ -96,7 +95,7 @@ class SyncClient {
       pushReq.write(jsonEncode(outgoingPayload.toJson()));
       final pushRes = await pushReq.close();
       if (pushRes.statusCode != 200) {
-        await SyncService.instance.setRunStatus(SyncRunStatus.failed, error: 'Push failed.');
+        SyncService.instance.setRunStatus(SyncRunStatus.failed, error: 'Push failed.');
         return false;
       }
       final pushBody = await pushRes.transform(utf8.decoder).join();
@@ -116,17 +115,50 @@ class SyncClient {
               .toList() ??
           [];
       await SyncService.instance.markChildrenSynced(pushedChildIds);
-      await SyncService.instance.recordSuccessfulSync();
+      await SyncService.instance.recordSuccessfulSync(DateTime.now());
       return true;
     } catch (e) {
       debugPrint('SyncClient performSync error: $e');
-      await SyncService.instance.setRunStatus(
+      SyncService.instance.setRunStatus(
         SyncRunStatus.failed,
         error: e.toString(),
       );
       return false;
     }
   }
+
+  Future<SyncResult> syncNow() async {
+  final settings = SettingsStore.instance;
+
+  final serverIp = settings.syncServerIp.trim();
+  final pairingCode = settings.syncPairingCode.trim();
+
+  if (serverIp.isEmpty) {
+    return const SyncResult(
+      ok: false,
+      message: 'Desktop server address is not configured.',
+    );
+  }
+
+  if (pairingCode.isEmpty) {
+    return const SyncResult(
+      ok: false,
+      message: 'Pairing code is not configured.',
+    );
+  }
+
+  final success = await performSync(
+    serverIp: serverIp,
+    pairingCode: pairingCode,
+  );
+
+  return SyncResult(
+    ok: success,
+    message: success
+        ? 'Sync completed successfully.'
+        : SyncService.instance.lastError ?? 'Sync failed.',
+  );
+}
 
   Future<void> _downloadMissingFiles({
     required String serverIp,

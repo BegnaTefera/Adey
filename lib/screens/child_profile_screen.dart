@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
-import 'package:printing/printing.dart';
 import '../data/children_store.dart';
 import '../data/formatters.dart';
-import '../data/registration_pdf.dart';
+import '../data/document_printing.dart';
+import '../data/settings_store.dart';
+import '../data/sync/sync_service.dart';
 import '../models/authorized_pickup.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
@@ -285,38 +285,6 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     }
   }
 
-  Future<void> _printForm(Child child) async {
-    try {
-      final pdfData = RegistrationPdfData(
-        childFirstName: child.firstName,
-        childLastName: child.lastName,
-        gender: child.gender,
-        childDob: child.dob,
-        guardians: child.guardians,
-        healthCondition: child.healthCondition,
-        dietaryNotes: child.dietaryNotes,
-        specialCharacteristics: child.specialCharacteristics,
-        pickupPeople: child.additionalPickupPeople,
-        agreementText: registrationAgreementText,
-        signatureStrokes: const [],
-        signatureAreaSize: const Size(260, 64),
-        signedAt: child.enrolledSince,
-      );
-      final pdfBytes = await buildRegistrationPdf(pdfData);
-      await Printing.layoutPdf(
-        onLayout: (_) => pdfBytes,
-        name: 'Registration_${child.firstName}_${child.lastName}.pdf',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      showAppFeedback(
-        context,
-        message: 'Could not print form: $e',
-        kind: AppFeedbackKind.error,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final child = _child;
@@ -352,12 +320,6 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                           ),
                         ),
                       ),
-                      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
-                        IconButton.outlined(
-                          icon: const Icon(Icons.print_outlined, size: 20),
-                          tooltip: 'Print Registration Form',
-                          onPressed: () => _printForm(child),
-                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -850,6 +812,7 @@ class _DocumentsTab extends StatelessWidget {
         ),
       );
     }
+    final isDesktop = SettingsStore.instance.isDesktop;
     return Container(
       decoration: cardDecoration(),
       clipBehavior: Clip.antiAlias,
@@ -885,6 +848,13 @@ class _DocumentsTab extends StatelessWidget {
                         Text(doc.label, style: AppText.bodyMedium),
                         Text(formatDate(doc.uploadedAt),
                             style: AppText.caption),
+                        // Mobile can't print, so for the registration form it
+                        // just reports whether the office copy got done.
+                        if (!isDesktop && doc.type == DocumentType.registration)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: _PrintStatusChip(printed: doc.printed),
+                          ),
                       ],
                     ),
                   ),
@@ -899,6 +869,14 @@ class _DocumentsTab extends StatelessWidget {
                         style: AppText.monoCaption
                             .copyWith(color: fg, fontWeight: FontWeight.w600)),
                   ),
+                  // Reprinting stays available whatever `printed` says: a lost
+                  // copy never needs anything un-queued first.
+                  if (isDesktop && (canOpen || (doc.sha256 ?? '').isNotEmpty))
+                    IconButton(
+                      icon: const Icon(Icons.print_outlined, size: 20),
+                      tooltip: 'Print',
+                      onPressed: () => _printDocument(context, doc),
+                    ),
                   const SizedBox(width: 8),
                   Icon(
                     canOpen ? Icons.chevron_right : Icons.hourglass_empty,
@@ -912,6 +890,30 @@ class _DocumentsTab extends StatelessWidget {
         }),
       ),
     );
+  }
+
+  Future<void> _printDocument(BuildContext context, ChildDocument doc) async {
+    try {
+      final printed = await printStoredDocument(
+        doc,
+        name: '${doc.label} - ${child.fullName}.pdf',
+      );
+      // A form still waiting in the print queue is done once it has been
+      // printed from here too; otherwise it would get printed twice.
+      if (printed && doc.type == DocumentType.registration && !doc.printed) {
+        await SyncService.instance.markDocumentPrinted(doc.id);
+      }
+    } on DocumentUnavailableException catch (e) {
+      if (!context.mounted) return;
+      showAppFeedback(context, message: e.message, kind: AppFeedbackKind.info);
+    } catch (e) {
+      if (!context.mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not print: $e',
+        kind: AppFeedbackKind.error,
+      );
+    }
   }
 
   Future<void> _openDocument(BuildContext context, ChildDocument doc) async {
@@ -946,6 +948,46 @@ class _DocumentsTab extends StatelessWidget {
       onAction: result.type == ResultType.fileNotFound
           ? null
           : () => _openDocument(context, doc),
+    );
+  }
+}
+
+/// Read-only "did the office copy get done" indicator shown on mobile.
+class _PrintStatusChip extends StatelessWidget {
+  final bool printed;
+  const _PrintStatusChip({required this.printed});
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, fg, label, icon) = printed
+        ? (AppColors.syncSoft, AppColors.sync, 'Printed', Icons.check)
+        : (
+            AppColors.pendingSoft,
+            AppColors.pendingTextDark,
+            'Queued for printing',
+            Icons.print_outlined,
+          );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: AppText.monoCaption.copyWith(
+              color: fg,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

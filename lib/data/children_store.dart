@@ -50,8 +50,13 @@ class ChildrenStore extends ChangeNotifier {
     return null;
   }
 
+  /// Re-reads everything from SQLite. Sync calls this after merging rows
+  /// from the other device ([init] is a no-op once initialized).
+  Future<void> refresh() => _refresh();
+
   Future<void> _refresh() async {
     _children = await ChildrenRepository.instance.fetchAll();
+    _initialized = true;
     notifyListeners();
   }
 }

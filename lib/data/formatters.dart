@@ -40,4 +40,12 @@ String formatDateShort(DateTime date) {
   return DateFormat('MMM d').format(date);
 }
 
+/// Clock time, e.g. "3:42 PM".
+String formatTime(DateTime time) => DateFormat('h:mm a').format(time);
+
+/// Date (honoring the calendar setting) plus clock time — for "last
+/// synced" style timestamps.
+String formatDateTime(DateTime dateTime) =>
+    '${formatDate(dateTime)}, ${formatTime(dateTime)}';
+
 String formatEtb(double amount) => 'ETB ${amount.toStringAsFixed(0)}';

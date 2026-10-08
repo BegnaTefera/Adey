@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../data/fee_types_store.dart';
+import '../data/sync/sync_client.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/conflict_banner.dart';
 import 'dashboard_screen.dart';
 import 'children_screen.dart';
 import 'register_screen.dart';
@@ -19,6 +21,26 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   _Screen _screen = _Screen.dashboard;
   String? _registeredChildId;
+
+  @override
+void initState() {
+  super.initState();
+
+  // Automatically sync when the app opens.
+  _syncOnAppOpen();
+}
+
+Future<void> _syncOnAppOpen() async {
+  try {
+    final result = await SyncClient.instance.syncNow();
+
+    if (!result.ok) {
+      debugPrint('Automatic sync failed: ${result.message}');
+    }
+  } catch (e) {
+    debugPrint('Automatic sync error: $e');
+  }
+}
 
   Future<void> _openRegister() async {
     if (!FeeTypesStore.instance.hasAnyFeeTypes) {
@@ -53,14 +75,21 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: switch (_screen) {
-          _Screen.dashboard => const DashboardScreen(),
-          _Screen.children => const ChildrenScreen(),
-          _Screen.billing => BillingScreen(
-              key: ValueKey(_registeredChildId),
-              registeredChildId: _registeredChildId,
+        child: Column(
+          children: [
+            const ConflictBanner(),
+            Expanded(
+              child: switch (_screen) {
+                _Screen.dashboard => const DashboardScreen(),
+                _Screen.children => const ChildrenScreen(),
+                _Screen.billing => BillingScreen(
+                    key: ValueKey(_registeredChildId),
+                    registeredChildId: _registeredChildId,
+                  ),
+              },
             ),
-        },
+          ],
+        ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,

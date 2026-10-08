@@ -11,11 +11,27 @@ import 'sync_models.dart';
 
 enum SyncRunStatus { idle, syncing, success, failed }
 
-/// Orchestrates exporting, merging, conflict resolution, and store refresh.
+/// The merge engine shared by both apps.
+///
+/// Desktop is the source of truth and runs the HTTP server; mobile is a
+/// client. Neither the roles nor the wire protocol change what happens to
+/// a row once it arrives: the same [importChanges] runs on both sides.
+///
+/// Merge rules, per incoming row:
+///  * unknown id → insert.
+///  * identical content → nothing to do.
+///  * `payments` that **both** sides changed since the last sync → don't
+///    overwrite either; record a row in `sync_conflicts` for a human.
+///  * everything else → newest `updated_at` wins (ties keep what's local).
+///
+/// `documents.printed` is owned by desktop and is never accepted from
+/// mobile, so it can't conflict.
 class SyncService extends ChangeNotifier {
   SyncService._internal();
   static final SyncService instance = SyncService._internal();
 
+  /// Parents before children — inserts happen in this order so foreign
+  /// keys are satisfied.
   static const syncTables = [
     'children',
     'guardians',
@@ -27,9 +43,15 @@ class SyncService extends ChangeNotifier {
     'fee_rates',
   ];
 
+  /// Phone and desktop clocks are never perfectly aligned. Pulls look back
+  /// this much further than the last sync time; re-seeing a row is
+  /// harmless because identical or older rows are skipped.
+  static const clockSkewOverlap = Duration(minutes: 2);
+
   List<SyncConflict> _conflicts = [];
   SyncRunStatus _runStatus = SyncRunStatus.idle;
   String? _lastError;
+  final Map<String, Set<String>> _columnCache = {};
 
   List<SyncConflict> get conflicts => List.unmodifiable(_conflicts);
   SyncRunStatus get runStatus => _runStatus;
@@ -53,27 +75,57 @@ class SyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<SyncPayload> exportChanges({DateTime? since}) async {
+  // ---------------------------------------------------------------------
+  // Export
+  // ---------------------------------------------------------------------
+
+  /// Rows created or edited since [since] (everything when null), across
+  /// all tables.
+  ///
+  /// [excludeIds] lists rows to leave out (`table -> ids`): the caller
+  /// passes the rows it just received so they aren't echoed back. Rows
+  /// with an unresolved conflict on this side are always left out so the
+  /// other side isn't asked to re-judge something already waiting for a
+  /// human decision here.
+  Future<SyncPayload> exportChanges({
+    DateTime? since,
+    Map<String, Set<String>> excludeIds = const {},
+  }) async {
     final db = await AppDatabase.instance.database;
     final tables = <String, List<Map<String, dynamic>>>{};
-    final isMobile = !SettingsStore.instance.isDesktop;
+    final isDesktop = SettingsStore.instance.isDesktop;
+    final cutoff = since?.subtract(clockSkewOverlap).toIso8601String();
+
+    final conflictRows = await db.query('sync_conflicts');
+    final conflicted = <String, Set<String>>{};
+    for (final c in conflictRows) {
+      conflicted
+          .putIfAbsent(c['table_name'] as String, () => <String>{})
+          .add(c['entity_id'] as String);
+    }
 
     for (final table in syncTables) {
-      final rows = since == null
+      final rows = cutoff == null
           ? await db.query(table)
           : await db.query(
               table,
               where: 'updated_at > ?',
-              whereArgs: [since.toIso8601String()],
+              whereArgs: [cutoff],
             );
+      final skip = <String>{
+        ...?excludeIds[table],
+        ...?conflicted[table],
+      };
       tables[table] = rows
-          .map((r) => _prepareRowForExport(table, Map<String, dynamic>.from(r), isMobile))
+          .where((r) => !skip.contains(r['id']))
+          .map((r) => _prepareRowForExport(table, Map<String, dynamic>.from(r), isDesktop))
           .toList();
     }
 
     return SyncPayload(
       deviceId: SettingsStore.instance.deviceId,
       timestamp: DateTime.now(),
+      since: since,
       tables: tables,
     );
   }
@@ -81,230 +133,348 @@ class SyncService extends ChangeNotifier {
   Map<String, dynamic> _prepareRowForExport(
     String table,
     Map<String, dynamic> row,
-    bool isMobile,
+    bool isDesktop,
   ) {
     if (table == 'documents') {
+      // Absolute paths mean nothing on the other device; bytes travel via
+      // /file keyed by sha256.
       row.remove('file_path');
-      if (isMobile) row.remove('printed');
+      // Only desktop owns `printed`. Mobile never sends it.
+      if (!isDesktop) row.remove('printed');
+    }
+    if (table == 'children') {
+      // At the moment a child leaves this device it is, by definition,
+      // being synced.
+      row['synced'] = 1;
     }
     return row;
   }
 
+  // ---------------------------------------------------------------------
+  // Import / merge
+  // ---------------------------------------------------------------------
+
   Future<ImportResult> importChanges(SyncPayload payload) async {
     final db = await AppDatabase.instance.database;
-    var conflictCount = 0;
-    final missingHashes = <String>{};
     final isDesktop = SettingsStore.instance.isDesktop;
-    final localDeviceId = SettingsStore.instance.deviceId;
+
+    // The baseline "last time both sides agreed". Desktop learns it from
+    // the phone's request; the phone knows it itself.
+    final base = isDesktop ? payload.since : SettingsStore.instance.lastSyncTime;
+
+    var conflictCount = 0;
+    var skipped = 0;
+    final applied = <String, Set<String>>{};
 
     await db.transaction((txn) async {
-      for (final entry in payload.tables.entries) {
-        final table = entry.key;
-        final rows = entry.value;
+      for (final table in syncTables) {
+        final rows = payload.tables[table];
+        if (rows == null) continue;
+        final columns = await _columnsOf(txn, table);
 
         for (final rawRow in rows) {
-          final row = Map<String, dynamic>.from(rawRow);
+          final row = Map<String, dynamic>.from(rawRow)
+            ..removeWhere((key, _) => !columns.contains(key));
           final id = row['id'] as String?;
           if (id == null) continue;
 
-          final existing = await txn.query(table, where: 'id = ?', whereArgs: [id]);
+          final existingRows = await txn.query(
+            table,
+            where: 'id = ?',
+            whereArgs: [id],
+            limit: 1,
+          );
+          final existing = existingRows.isEmpty ? null : existingRows.first;
 
-          if (table == 'payments') {
-            if (existing.isNotEmpty &&
-                _paymentConflict(existing.first, row)) {
-              await _recordConflict(txn, table, id, existing.first, row);
+          if (table == 'documents') {
+            row.remove('file_path');
+            _applyPrintedRule(row, existing, isDesktop);
+          }
+
+          if (existing != null) {
+            if (_sameContent(existing, row)) {
+              // Both sides already agree. If a human was being asked about
+              // this payment, the question has answered itself.
+              if (table == 'payments') await _clearConflict(txn, table, id);
+              continue;
+            }
+
+            if (table == 'payments' && _changedSince(existing, base)) {
+              await _recordConflict(txn, table, id, existing, row);
               conflictCount++;
               continue;
             }
-          } else if (existing.isNotEmpty && !_remoteWins(existing.first, row)) {
-            continue;
+
+            if (!_remoteIsNewer(existing, row)) continue;
           }
 
-          if (table == 'documents') {
-            _applyDocumentImportRules(
-              row: row,
-              existing: existing,
-              fromRemote: payload.deviceId != localDeviceId,
-              isDesktop: isDesktop,
-            );
-            final hash = row['sha256'] as String?;
-            if (hash != null && hash.isNotEmpty) {
-              final hasLocal = await DocumentStorage.hasBytesForHash(hash);
-              if (!hasLocal) missingHashes.add(hash);
+          try {
+            if (existing == null) {
+              await txn.insert(table, row);
+            } else {
+              await txn.update(table, row, where: 'id = ?', whereArgs: [id]);
             }
-          }
-
-          await txn.insert(
-            table,
-            row,
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-
-          if (table == 'documents') {
-            final hash = row['sha256'] as String?;
-            if (hash != null && hash.isNotEmpty) {
-              final path = await DocumentStorage.localPathForHash(hash);
-              if (path != null) {
-                await txn.update(
-                  'documents',
-                  {'file_path': path},
-                  where: 'id = ?',
-                  whereArgs: [id],
-                );
-              }
-            }
+            applied.putIfAbsent(table, () => <String>{}).add(id);
+          } catch (e) {
+            // A row that can't be stored (e.g. its parent child isn't here
+            // yet) must not sink the whole batch; the next pass retries it.
+            skipped++;
+            debugPrint('Sync: skipped $table/$id: $e');
           }
         }
       }
     });
 
-    await ChildrenStore.instance.init();
-    await ExpensesStore.instance.init();
-    await FeeTypesStore.instance.init();
-    await loadConflicts();
-    notifyListeners();
+    // Link any document rows we just wrote to bytes we already hold, and
+    // list the hashes whose bytes we still need.
+    final missingHashes = <String>{};
+    for (final id in applied['documents'] ?? const <String>{}) {
+      final doc = await db.query('documents', where: 'id = ?', whereArgs: [id]);
+      if (doc.isEmpty) continue;
+      final hash = doc.first['sha256'] as String?;
+      if (!DocumentStorage.isValidHash(hash)) continue;
+      final path = await DocumentStorage.localPathForHash(hash!);
+      if (path != null) {
+        await db.update(
+          'documents',
+          {'file_path': path},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      } else {
+        missingHashes.add(hash);
+      }
+    }
+
+    await _refreshStores();
 
     return ImportResult(
       conflictCount: conflictCount,
       missingHashes: missingHashes.toList(),
+      applied: applied,
+      skipped: skipped,
     );
   }
 
-  bool _paymentConflict(Map<String, dynamic> local, Map<String, dynamic> remote) {
-    return local['status'] != remote['status'] || local['amount'] != remote['amount'];
+  /// Desktop decides `printed`; mobile can't. A registration form that
+  /// first arrives from the phone is queued for printing, any other
+  /// document type isn't. Desktop ignores `printed` on later updates. On
+  /// mobile the value desktop sent is simply adopted (and defaults to
+  /// "printed" if absent).
+  void _applyPrintedRule(
+    Map<String, dynamic> row,
+    Map<String, Object?>? existing,
+    bool isDesktop,
+  ) {
+    if (isDesktop) {
+      if (existing == null) {
+        row['printed'] = row['type'] == 'registration' ? 0 : 1;
+      } else {
+        row.remove('printed');
+      }
+    } else if (!row.containsKey('printed') && existing == null) {
+      row['printed'] = 1;
+    }
   }
 
-  bool _remoteWins(Map<String, dynamic> local, Map<String, dynamic> remote) {
-    final localAt = DateTime.tryParse(local['updated_at'] as String? ?? '');
+  bool _sameContent(Map<String, Object?> local, Map<String, dynamic> remote) {
+    for (final entry in remote.entries) {
+      if (entry.key == 'updated_at') continue;
+      final a = local[entry.key];
+      final b = entry.value;
+      if (a == b) continue;
+      if (a is num && b is num && (a - b).abs() < 1e-9) continue;
+      return false;
+    }
+    return true;
+  }
+
+  bool _changedSince(Map<String, Object?> local, DateTime? base) {
+    if (base == null) return true;
+    final at = DateTime.tryParse(local['updated_at'] as String? ?? '');
+    if (at == null) return true;
+    return at.isAfter(base);
+  }
+
+  bool _remoteIsNewer(Map<String, Object?> local, Map<String, dynamic> remote) {
     final remoteAt = DateTime.tryParse(remote['updated_at'] as String? ?? '');
     if (remoteAt == null) return false;
+    final localAt = DateTime.tryParse(local['updated_at'] as String? ?? '');
     if (localAt == null) return true;
-    return !remoteAt.isBefore(localAt);
+    return remoteAt.isAfter(localAt);
   }
 
-  void _applyDocumentImportRules({
-    required Map<String, dynamic> row,
-    required List<Map<String, dynamic>> existing,
-    required bool fromRemote,
-    required bool isDesktop,
-  }) {
-    row.remove('file_path');
-    if (existing.isEmpty) {
-      if (fromRemote && row['type'] == 'registration') {
-        row['printed'] = 0;
-      } else {
-        row['printed'] = 1;
-      }
-      return;
-    }
-    if (fromRemote && isDesktop) {
-      row['printed'] = existing.first['printed'];
-    }
+  Future<Set<String>> _columnsOf(DatabaseExecutor db, String table) async {
+    final cached = _columnCache[table];
+    if (cached != null) return cached;
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final names = {for (final c in info) c['name'] as String};
+    _columnCache[table] = names;
+    return names;
   }
 
   Future<void> _recordConflict(
     DatabaseExecutor txn,
     String table,
     String entityId,
-    Map<String, dynamic> local,
+    Map<String, Object?> local,
     Map<String, dynamic> remote,
   ) async {
+    final existing = await txn.query(
+      'sync_conflicts',
+      where: 'table_name = ? AND entity_id = ?',
+      whereArgs: [table, entityId],
+      limit: 1,
+    );
     final conflict = SyncConflict(
-      id: const Uuid().v4(),
+      id: existing.isEmpty ? const Uuid().v4() : existing.first['id'] as String,
       tableName: table,
       entityId: entityId,
-      localData: local,
-      remoteData: remote,
-      createdAt: DateTime.now(),
+      localData: Map<String, dynamic>.from(local),
+      remoteData: Map<String, dynamic>.from(remote),
+      createdAt: existing.isEmpty
+          ? DateTime.now()
+          : DateTime.parse(existing.first['created_at'] as String),
     );
-    await txn.insert('sync_conflicts', conflict.toMap());
+    if (existing.isEmpty) {
+      await txn.insert('sync_conflicts', conflict.toMap());
+    } else {
+      // Same payment flagged again: refresh what we're comparing instead of
+      // stacking up duplicate banners.
+      await txn.update(
+        'sync_conflicts',
+        conflict.toMap(),
+        where: 'id = ?',
+        whereArgs: [conflict.id],
+      );
+    }
   }
 
-  Future<void> resolveConflict(SyncConflict conflict, {required bool keepLocal}) async {
+  Future<void> _clearConflict(
+    DatabaseExecutor txn,
+    String table,
+    String entityId,
+  ) async {
+    await txn.delete(
+      'sync_conflicts',
+      where: 'table_name = ? AND entity_id = ?',
+      whereArgs: [table, entityId],
+    );
+  }
+
+  /// Applies the person's choice. There is no auto-resolution and no
+  /// timeout — this is only ever called from the compare screen.
+  ///
+  /// Either way the surviving row is restamped with the current time, so
+  /// on the next sync it counts as the newest version and the other side
+  /// takes it.
+  Future<void> resolveConflict(
+    SyncConflict conflict, {
+    required bool keepLocal,
+  }) async {
     final db = await AppDatabase.instance.database;
-    final targetData = keepLocal ? conflict.localData : conflict.remoteData;
+    final now = DateTime.now().toIso8601String();
 
     await db.transaction((txn) async {
-      await txn.insert(
-        conflict.tableName,
-        targetData,
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      if (keepLocal) {
+        // Use the live row, not the snapshot — it may have been edited
+        // since the conflict was recorded.
+        await txn.update(
+          conflict.tableName,
+          {'updated_at': now},
+          where: 'id = ?',
+          whereArgs: [conflict.entityId],
+        );
+      } else {
+        final chosen = Map<String, dynamic>.from(conflict.remoteData)
+          ..['updated_at'] = now;
+        final present = await txn.query(
+          conflict.tableName,
+          where: 'id = ?',
+          whereArgs: [conflict.entityId],
+          limit: 1,
+        );
+        if (present.isEmpty) {
+          await txn.insert(conflict.tableName, chosen);
+        } else {
+          await txn.update(
+            conflict.tableName,
+            chosen,
+            where: 'id = ?',
+            whereArgs: [conflict.entityId],
+          );
+        }
+      }
+      await txn.delete(
+        'sync_conflicts',
+        where: 'id = ?',
+        whereArgs: [conflict.id],
       );
-      await txn.delete('sync_conflicts', where: 'id = ?', whereArgs: [conflict.id]);
     });
 
-    await ChildrenStore.instance.init();
+    await _refreshStores();
+  }
+
+  Future<void> _refreshStores() async {
+    await ChildrenStore.instance.refresh();
+    await ExpensesStore.instance.refresh();
+    await FeeTypesStore.instance.refresh();
     await loadConflicts();
   }
 
+  // ---------------------------------------------------------------------
+  // Printing (desktop-owned)
+  // ---------------------------------------------------------------------
+
+  /// Sets `printed: true` on a document. Restamped so the phone's status
+  /// chip flips to "Printed" on its next sync.
   Future<void> markDocumentPrinted(String documentId) async {
     final db = await AppDatabase.instance.database;
-    final now = DateTime.now().toIso8601String();
     await db.update(
       'documents',
-      {'printed': 1, 'updated_at': now},
+      {'printed': 1, 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [documentId],
     );
-    await ChildrenStore.instance.init();
-    notifyListeners();
+    await ChildrenStore.instance.refresh();
   }
 
-  Future<int> unprintedRegistrationCount() async {
-    final db = await AppDatabase.instance.database;
-    final result = await db.rawQuery(
-      "SELECT COUNT(*) AS c FROM documents WHERE type = 'registration' AND printed = 0",
-    );
-    return Sqflite.firstIntValue(result) ?? 0;
-  }
+  // ---------------------------------------------------------------------
+  // Run state
+  // ---------------------------------------------------------------------
 
-  Future<List<({String childName, String childInitials, ChildDocumentRow doc})>>
-      unprintedRegistrations() async {
-    final db = await AppDatabase.instance.database;
-    final rows = await db.rawQuery('''
-      SELECT d.*, c.first_name, c.last_name
-      FROM documents d
-      JOIN children c ON c.id = d.child_id
-      WHERE d.type = 'registration' AND d.printed = 0
-      ORDER BY d.uploaded_at DESC
-    ''');
-    return rows.map((row) {
-      final first = row['first_name'] as String;
-      final last = row['last_name'] as String;
-      return (
-        childName: '$first $last',
-        childInitials: '${first.isNotEmpty ? first[0] : ''}${last.isNotEmpty ? last[0] : ''}'
-            .toUpperCase(),
-        doc: ChildDocumentRow.fromMap(row),
-      );
-    }).toList();
-  }
-
-  Future<void> setRunStatus(SyncRunStatus status, {String? error}) async {
+  void setRunStatus(SyncRunStatus status, {String? error}) {
     _runStatus = status;
     _lastError = error;
     notifyListeners();
   }
 
-  Future<void> recordSuccessfulSync() async {
-    await SettingsStore.instance.setLastSyncTime(DateTime.now());
-    await setRunStatus(SyncRunStatus.success);
+  Future<void> recordSuccessfulSync(DateTime startedAt) async {
+    await SettingsStore.instance.setLastSyncTime(startedAt);
+    setRunStatus(SyncRunStatus.success);
   }
 
+  /// Flags pushed children as synced. Deliberately leaves `updated_at`
+  /// alone: bookkeeping must not look like a new edit.
   Future<void> markChildrenSynced(Iterable<String> childIds) async {
     if (childIds.isEmpty) return;
     final db = await AppDatabase.instance.database;
-    final now = DateTime.now().toIso8601String();
     for (final id in childIds) {
       await db.update(
         'children',
-        {'synced': 1, 'updated_at': now},
+        {'synced': 1},
         where: 'id = ?',
         whereArgs: [id],
       );
     }
+    await ChildrenStore.instance.refresh();
   }
 
+  // ---------------------------------------------------------------------
+  // Files
+  // ---------------------------------------------------------------------
+
+  /// Hashes of documents whose bytes this device doesn't have yet.
   Future<List<String>> hashesNeedingDownload() async {
     final db = await AppDatabase.instance.database;
     final rows = await db.query(
@@ -312,34 +482,63 @@ class SyncService extends ChangeNotifier {
       columns: ['sha256'],
       where: "sha256 IS NOT NULL AND sha256 != ''",
     );
-    final missing = <String>[];
+    final missing = <String>{};
     for (final row in rows) {
       final hash = row['sha256'] as String?;
-      if (hash == null || hash.isEmpty) continue;
-      if (!await DocumentStorage.hasBytesForHash(hash)) {
-        missing.add(hash);
-      }
+      if (!DocumentStorage.isValidHash(hash)) continue;
+      if (!await DocumentStorage.hasBytesForHash(hash!)) missing.add(hash);
     }
-    return missing;
+    return missing.toList();
   }
 
-  Future<List<String>> hashesAvailableForUpload() async {
+  /// Where this device keeps the bytes for [hash], if it has them. Looks
+  /// for the content-addressed file first, then falls back to a path
+  /// recorded on a document row (files saved before storage became
+  /// content-addressed), verifying the bytes really match.
+  Future<String?> pathForHash(String hash) async {
+    if (!DocumentStorage.isValidHash(hash)) return null;
+    final direct = await DocumentStorage.localPathForHash(hash);
+    if (direct != null) return direct;
+
     final db = await AppDatabase.instance.database;
     final rows = await db.query(
       'documents',
-      where: "sha256 IS NOT NULL AND sha256 != ''",
+      columns: ['file_path'],
+      where: 'sha256 = ? AND file_path IS NOT NULL',
+      whereArgs: [hash],
     );
-    final hashes = <String>[];
     for (final row in rows) {
-      final hash = row['sha256'] as String?;
       final path = row['file_path'] as String?;
-      if (hash == null || hash.isEmpty || path == null || path.isEmpty) continue;
+      if (path == null || path.isEmpty) continue;
       if (await DocumentStorage.verify(path: path, expectedSha256: hash)) {
-        hashes.add(hash);
+        return path;
       }
     }
-    return hashes;
+    return null;
   }
+
+  /// Hashes of every document whose bytes this device holds. Sent with a
+  /// push so the receiver can ask for whatever it's missing.
+  Future<List<String>> localFileHashes() async {
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      'documents',
+      columns: ['sha256'],
+      where: "sha256 IS NOT NULL AND sha256 != ''",
+    );
+    final hashes = <String>{};
+    for (final row in rows) {
+      final hash = row['sha256'] as String?;
+      if (!DocumentStorage.isValidHash(hash)) continue;
+      if (await hasBytes(hash!)) hashes.add(hash);
+    }
+    return hashes.toList();
+  }
+
+  /// True if this device has verified bytes for [hash] (either storage
+  /// layout). Used to skip a transfer entirely when the hash already
+  /// matches.
+  Future<bool> hasBytes(String hash) async => await pathForHash(hash) != null;
 
   Future<void> attachDownloadedFile(String hash, String path) async {
     final db = await AppDatabase.instance.database;
@@ -349,7 +548,7 @@ class SyncService extends ChangeNotifier {
       where: 'sha256 = ?',
       whereArgs: [hash],
     );
-    await ChildrenStore.instance.init();
+    await ChildrenStore.instance.refresh();
   }
 }
 
@@ -357,39 +556,18 @@ class ImportResult {
   final int conflictCount;
   final List<String> missingHashes;
 
+  /// Rows actually written (`table -> ids`). The mobile client uses it to
+  /// avoid pushing back what it just pulled.
+  final Map<String, Set<String>> applied;
+  final int skipped;
+
   const ImportResult({
     required this.conflictCount,
     required this.missingHashes,
-  });
-}
-
-/// Lightweight document row for the print queue (avoids pulling full Child).
-class ChildDocumentRow {
-  final String id;
-  final String childId;
-  final String label;
-  final String type;
-  final DateTime uploadedAt;
-  final String? filePath;
-  final String? sha256;
-
-  const ChildDocumentRow({
-    required this.id,
-    required this.childId,
-    required this.label,
-    required this.type,
-    required this.uploadedAt,
-    this.filePath,
-    this.sha256,
+    this.applied = const {},
+    this.skipped = 0,
   });
 
-  factory ChildDocumentRow.fromMap(Map<String, dynamic> map) => ChildDocumentRow(
-        id: map['id'] as String,
-        childId: map['child_id'] as String,
-        label: map['label'] as String,
-        type: map['type'] as String,
-        uploadedAt: DateTime.parse(map['uploaded_at'] as String),
-        filePath: map['file_path'] as String?,
-        sha256: map['sha256'] as String?,
-      );
+  int get appliedCount =>
+      applied.values.fold(0, (sum, ids) => sum + ids.length);
 }
