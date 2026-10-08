@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../data/formatters.dart';
 import '../data/settings_store.dart';
 import '../data/sync/sync_client.dart';
+import '../data/sync/sync_pairing.dart';
 import '../data/sync/sync_server.dart';
 import '../data/sync/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import 'qr_scanner_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -128,16 +131,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: _toggleServer,
           ),
           const Divider(height: 24, color: AppColors.border),
-          Text('Address to enter on the phone', style: AppText.caption),
+          Text('Address (also inside the QR code)', style: AppText.caption),
           const SizedBox(height: 4),
-          SelectableText(
-            _serverIp == null
-                ? 'Searching…'
-                : '$_serverIp:${server.port}',
-            style: AppText.monoCaption.copyWith(
-              fontSize: 16,
-              color: AppColors.foreground,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  _serverIp == null
+                      ? 'Searching…'
+                      : '$_serverIp:${server.port}',
+                  style: AppText.monoCaption.copyWith(
+                    fontSize: 16,
+                    color: AppColors.foreground,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh address',
+                icon: const Icon(Icons.refresh, size: 18),
+                onPressed: _loadIp,
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Text('Pairing code', style: AppText.caption),
@@ -174,7 +188,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
+          const Divider(height: 24, color: AppColors.border),
+          Text('Scan to pair from the phone', style: AppText.caption),
+          const SizedBox(height: 12),
+          Center(child: _pairingQr(server: server, running: running)),
         ],
+      ),
+    );
+  }
+
+  Widget _pairingQr({required SyncServer server, required bool running}) {
+    if (!running) {
+      return Text(
+        'Turn on the sync server to show the QR code.',
+        style: AppText.caption,
+      );
+    }
+    if (_serverIp == null) {
+      return Text(
+        'Looking up this computer\'s address…',
+        style: AppText.caption,
+      );
+    }
+
+    final payload = SyncPairingInfo(
+      ip: _serverIp!,
+      port: server.port,
+      code: server.pairingCode,
+    ).toQrPayload();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: QrImageView(
+        data: payload,
+        version: QrVersions.auto,
+        size: 180,
+        backgroundColor: Colors.white,
       ),
     );
   }
@@ -247,10 +300,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'On the desktop, open Settings to see its address and pairing code.',
+            'Scan the QR code on the desktop\'s Settings screen, '
+            'or enter its address and code by hand.',
             style: AppText.caption,
           ),
           const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _openScanner,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Scan QR code'),
+            ),
+          ),
+          const SizedBox(height: 16),
           TextField(
             controller: _desktopIpController,
             keyboardType: TextInputType.url,
@@ -317,6 +380,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SettingsStore.instance.setSyncServerIp(_desktopIpController.text);
     await SettingsStore.instance.setSyncPairingCode(_pairingCodeController.text);
     if (mounted) FocusScope.of(context).unfocus();
+  }
+
+  Future<void> _openScanner() async {
+    final info = await Navigator.of(context).push<SyncPairingInfo>(
+      MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+    );
+    if (info == null || !mounted) return;
+
+    await SettingsStore.instance.setSyncConnection(
+      ip: info.ip,
+      port: info.port,
+      code: info.code,
+    );
+    _desktopIpController.text = info.ip;
+    _pairingCodeController.text = info.code;
+    if (!mounted) return;
+    setState(() {});
+    showAppFeedback(
+      context,
+      message: 'Paired with the desktop at ${info.ip}. Ready to sync.',
+      kind: AppFeedbackKind.success,
+    );
   }
 
   Future<void> _triggerManualSync() async {

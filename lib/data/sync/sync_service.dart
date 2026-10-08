@@ -186,6 +186,11 @@ class SyncService extends ChangeNotifier {
           );
           final existing = existingRows.isEmpty ? null : existingRows.first;
 
+          // A tombstone for a row we never had: nothing to delete, and no
+          // point storing a corpse. If we do hold the row, the normal
+          // newest-updated_at path applies `deleted = 1` below.
+          if (existing == null && row['deleted'] == 1) continue;
+
           if (table == 'documents') {
             row.remove('file_path');
             _applyPrintedRule(row, existing, isDesktop);

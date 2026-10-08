@@ -166,6 +166,14 @@ class _BillingScreenState extends State<BillingScreen> {
                         style: AppText.caption,
                       ),
                       IconButton(
+                        tooltip: 'Delete ${fee.name}',
+                        onPressed: () => _deleteFeeType(fee),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                      IconButton(
                         tooltip: 'Edit ${fee.name}',
                         onPressed: () => _editFeeType(fee),
                         icon: const Icon(Icons.edit_outlined),
@@ -320,6 +328,52 @@ class _BillingScreenState extends State<BillingScreen> {
         context,
         message: 'Could not save this fee type. $error',
         kind: AppFeedbackKind.error,
+      );
+    }
+  }
+
+  Future<void> _deleteFeeType(FeeType feeType) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete fee type?'),
+        content: Text(
+          '${feeType.name} will no longer be offered for new registrations '
+          'or payments. Existing payments keep their amounts.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await FeeTypesStore.instance.delete(feeType);
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: '${feeType.name} deleted.',
+        kind: AppFeedbackKind.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not delete this fee type. Try again. $error',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: () => _deleteFeeType(feeType),
       );
     }
   }

@@ -157,7 +157,7 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
     } else if (!configured) {
       subtitle = 'Add the desktop address and code in Settings';
     } else {
-      subtitle = 'Changes are saved on this device';
+      subtitle = 'Auto-sync on — edits copy in seconds, no button needed';
     }
 
     return Row(

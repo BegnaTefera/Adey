@@ -23,7 +23,11 @@ class FeeTypesStore extends ChangeNotifier {
 
   Future<void> refresh() async {
     final db = await AppDatabase.instance.database;
-    final feeRows = await db.query('fee_types', orderBy: 'name ASC');
+    final feeRows = await db.query(
+      'fee_types',
+      where: 'deleted = 0',
+      orderBy: 'name ASC',
+    );
     final rateRows = await db.query('fee_rates', orderBy: 'min_months ASC');
 
     _feeTypes = feeRows.map((feeRow) {
@@ -77,6 +81,21 @@ class FeeTypesStore extends ChangeNotifier {
         await txn.insert('fee_rates', rate.toMap(feeType.id));
       }
     });
+    await refresh();
+  }
+
+  /// Tombstones the fee type: the row stays so the delete reaches other
+  /// devices through sync, but every read filters it out. Age rates are
+  /// left in place — they belong to the hidden parent. Existing payments
+  /// keep their fee_type_name and amounts.
+  Future<void> delete(FeeType feeType) async {
+    final db = await AppDatabase.instance.database;
+    await db.update(
+      'fee_types',
+      {'deleted': 1, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [feeType.id],
+    );
     await refresh();
   }
 }

@@ -14,7 +14,9 @@ class SyncClient {
   final HttpClient _httpClient = HttpClient()
     ..connectionTimeout = const Duration(seconds: 10);
 
-  Future<Map<String, dynamic>?> pingServer({
+  /// Pings the desktop. Never throws: failures come back as a human-readable
+  /// [error] so the UI can say what actually went wrong.
+  Future<({Map<String, dynamic>? response, String? error})> pingServer({
     required String serverIp,
     int port = 8080,
     required String pairingCode,
@@ -24,14 +26,59 @@ class SyncClient {
       final req = await _httpClient.getUrl(uri);
       req.headers.set('X-Pairing-Code', pairingCode);
       final res = await req.close();
-      if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
-        return jsonDecode(body) as Map<String, dynamic>;
+      if (res.statusCode == HttpStatus.unauthorized) {
+        return (
+          response: null,
+          error:
+              'The desktop rejected the pairing code. Re-scan the QR code or enter its current code.',
+        );
       }
+      if (res.statusCode != 200) {
+        return (
+          response: null,
+          error: 'The desktop replied with HTTP ${res.statusCode}.',
+        );
+      }
+      final body = await res.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic>) {
+        return (response: null, error: 'The desktop sent an unexpected reply.');
+      }
+      return (response: decoded, error: null);
     } catch (e) {
       debugPrint('SyncClient ping error: $e');
+      return (response: null, error: _describeConnectionFailure(e, serverIp, port));
     }
-    return null;
+  }
+
+  /// Turns a raw network exception into a message a person can act on.
+  String _describeConnectionFailure(Object e, String serverIp, int port) {
+    final text = e.toString().toLowerCase();
+
+    if (text.contains('cleartext')) {
+      return 'This phone blocked the plain-HTTP sync connection. '
+          'Rebuild and reinstall the app from the updated project.';
+    }
+    if (text.contains('failed host lookup') || text.contains('name resolution')) {
+      return 'Could not find the desktop at $serverIp. Check the address.';
+    }
+    if (text.contains('refused')) {
+      return 'The desktop at $serverIp answered but refused the connection. '
+          'Turn on the sync server and allow port $port in its firewall.';
+    }
+    if (text.contains('timed out') || text.contains('timeout')) {
+      return 'Timed out reaching the desktop at $serverIp:$port. '
+          'Make sure both devices are on the same Wi-Fi and port $port '
+          'is allowed through the desktop firewall.';
+    }
+    if (text.contains('network is unreachable') ||
+        text.contains('connection reset') ||
+        text.contains('connection aborted')) {
+      return 'Lost the connection to the desktop at $serverIp:$port. '
+          'Check that both devices are on the same Wi-Fi.';
+    }
+    return 'Could not reach the desktop at $serverIp:$port. '
+        'Check that both devices are on the same Wi-Fi.';
   }
 
   /// Full sync pass: ping → pull → push → file transfers.
@@ -48,10 +95,10 @@ class SyncClient {
         port: port,
         pairingCode: pairingCode,
       );
-      if (ping == null || ping['paired'] != true) {
+      if (ping.response == null || ping.response!['paired'] != true) {
         SyncService.instance.setRunStatus(
           SyncRunStatus.failed,
-          error: 'Could not verify pairing with desktop.',
+          error: ping.error ?? 'The desktop did not confirm pairing.',
         );
         return false;
       }
@@ -127,7 +174,24 @@ class SyncClient {
     }
   }
 
-  Future<SyncResult> syncNow() async {
+  /// The run in flight, if any. Auto-sync and a manual "Sync now" must not
+  /// interleave: the second caller awaits the first instead of starting a
+  /// duplicate pull/push against the same desktop.
+  Future<SyncResult>? _activeRun;
+
+  Future<SyncResult> syncNow() {
+    final running = _activeRun;
+    if (running != null) return running;
+
+    late final Future<SyncResult> run;
+    run = _syncNow().whenComplete(() {
+      if (identical(_activeRun, run)) _activeRun = null;
+    });
+    _activeRun = run;
+    return run;
+  }
+
+  Future<SyncResult> _syncNow() async {
   final settings = SettingsStore.instance;
 
   final serverIp = settings.syncServerIp.trim();
@@ -149,6 +213,7 @@ class SyncClient {
 
   final success = await performSync(
     serverIp: serverIp,
+    port: settings.syncServerPort,
     pairingCode: pairingCode,
   );
 

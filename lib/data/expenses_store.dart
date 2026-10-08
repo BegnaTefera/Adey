@@ -33,9 +33,37 @@ class ExpensesStore extends ChangeNotifier {
     await _refresh();
   }
 
+  Future<void> updateExpense(ExpenseItem expense) async {
+    final db = await AppDatabase.instance.database;
+    await db.update(
+      'expenses',
+      expense.toMap(),
+      where: 'id = ?',
+      whereArgs: [expense.id],
+    );
+    await _refresh();
+  }
+
+  /// Tombstones the row so the delete syncs to the other device instead of
+  /// vanishing locally and reappearing on the next pull.
+  Future<void> deleteExpense(String id) async {
+    final db = await AppDatabase.instance.database;
+    await db.update(
+      'expenses',
+      {'deleted': 1, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    await _refresh();
+  }
+
   Future<void> _refresh() async {
     final db = await AppDatabase.instance.database;
-    final rows = await db.query('expenses', orderBy: 'date DESC');
+    final rows = await db.query(
+      'expenses',
+      where: 'deleted = 0',
+      orderBy: 'date DESC',
+    );
     _expenses = rows.map(ExpenseItem.fromMap).toList();
     notifyListeners();
   }

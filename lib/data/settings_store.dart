@@ -13,6 +13,7 @@ class SettingsStore extends ChangeNotifier {
 
   static const _calendarKey = 'use_ethiopian_calendar';
   static const _syncServerIpKey = 'sync_server_ip';
+  static const _syncServerPortKey = 'sync_server_port';
   static const _syncPairingCodeKey = 'sync_pairing_code';
   static const _lastSyncTimeKey = 'last_sync_time';
   static const _deviceIdKey = 'device_id';
@@ -22,6 +23,7 @@ class SettingsStore extends ChangeNotifier {
 
   bool useEthiopianCalendar = true;
   String syncServerIp = '';
+  int syncServerPort = 8080;
   String syncPairingCode = '';
   DateTime? lastSyncTime;
   String deviceId = '';
@@ -45,6 +47,7 @@ class SettingsStore extends ChangeNotifier {
 
     useEthiopianCalendar = values[_calendarKey] != '0';
     syncServerIp = values[_syncServerIpKey] ?? '';
+    syncServerPort = int.tryParse(values[_syncServerPortKey] ?? '') ?? 8080;
     syncPairingCode = values[_syncPairingCodeKey] ?? '';
     final lastSyncRaw = values[_lastSyncTimeKey];
     lastSyncTime = (lastSyncRaw == null || lastSyncRaw.isEmpty)
@@ -89,6 +92,28 @@ class SettingsStore extends ChangeNotifier {
     if (next == syncPairingCode) return;
     syncPairingCode = next;
     await _set(_syncPairingCodeKey, syncPairingCode);
+    notifyListeners();
+  }
+
+  /// Applies a full connection in one go (used by QR pairing). Moving to a
+  /// different address or port means potentially a different desktop, so the
+  /// previously trusted one is forgotten.
+  Future<void> setSyncConnection({
+    required String ip,
+    required int port,
+    required String code,
+  }) async {
+    final nextIp = ip.trim();
+    final nextCode = code.trim();
+    final moved = nextIp != syncServerIp || port != syncServerPort;
+
+    syncServerIp = nextIp;
+    syncServerPort = port;
+    syncPairingCode = nextCode;
+    await _set(_syncServerIpKey, syncServerIp);
+    await _set(_syncServerPortKey, '$syncServerPort');
+    await _set(_syncPairingCodeKey, syncPairingCode);
+    if (moved) await setPairedDesktopId('');
     notifyListeners();
   }
 

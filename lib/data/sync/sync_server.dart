@@ -30,17 +30,65 @@ class SyncServer extends ChangeNotifier {
         type: InternetAddressType.IPv4,
         includeLoopback: false,
       );
+
+      String? best;
+      var bestScore = 0;
+      String? firstSeen;
+
       for (final interface in interfaces) {
+        final name = interface.name.toLowerCase();
+        final adapterScore = _adapterScore(name);
+
         for (final addr in interface.addresses) {
-          if (!addr.isLoopback && !addr.address.startsWith('127.')) {
-            return addr.address;
+          if (addr.isLoopback || addr.address.startsWith('127.')) continue;
+          if (addr.address.startsWith('169.254.')) continue; // link-local
+
+          firstSeen ??= addr.address;
+          final score = _lanScore(addr.address) + adapterScore;
+          if (score > bestScore) {
+            bestScore = score;
+            best = addr.address;
           }
         }
       }
+      // Everything scored ≤ 0 (e.g. only internal adapters): show the first
+      // address rather than searching forever.
+      return best ?? firstSeen;
     } catch (e) {
       debugPrint('Error getting IP address: $e');
     }
     return null;
+  }
+
+  /// Ranks an address by how likely it is to be the LAN the phone shares:
+  /// 192.168.x first, then 10.x, then other private ranges, public last.
+  int _lanScore(String address) {
+    if (address.startsWith('192.168.')) return 100;
+    if (address.startsWith('10.')) return 80;
+    if (address.startsWith('172.')) {
+      final parts = address.split('.');
+      final second = parts.length > 1 ? int.tryParse(parts[1]) : null;
+      if (second != null && second >= 16 && second <= 31) return 60;
+    }
+    return 40;
+  }
+
+  /// Ranks the adapter itself. Never skips an adapter outright: Hyper-V
+  /// "External Switch" and "vEthernet" adapters often carry the real LAN
+  /// connection, while "Default Switch" is an internal NAT nothing can reach.
+  int _adapterScore(String name) {
+    var score = 0;
+    if (name.contains('default switch')) score -= 60;
+    if (name.contains('wsl')) score -= 50;
+    if (name.contains('vmware') || name.contains('vbox')) score -= 50;
+    if (name.contains('virtual') || name.contains('hyper')) score -= 30;
+    if (name.contains('bluetooth')) score -= 50;
+    if (name.startsWith('tun') || name.startsWith('tap')) score -= 50;
+    if (name.startsWith('br-')) score -= 50;
+    if (name.contains('wi-fi') || name.contains('wifi')) score += 30;
+    if (name.contains('external switch')) score += 25;
+    if (name.startsWith('ethernet')) score += 15;
+    return score;
   }
 
   Future<bool> start({int port = 8080}) async {

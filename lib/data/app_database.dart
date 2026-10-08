@@ -27,7 +27,7 @@ class AppDatabase {
     final path = join(dbPath, 'daycare.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -122,7 +122,8 @@ class AppDatabase {
             amount REAL NOT NULL,
             date TEXT NOT NULL,
             note TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0
           )
         ''');
 
@@ -132,7 +133,8 @@ class AppDatabase {
             name TEXT NOT NULL,
             recurring INTEGER NOT NULL,
             charge_on_registration INTEGER NOT NULL DEFAULT 0,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            deleted INTEGER NOT NULL DEFAULT 0
           )
         ''');
 
@@ -219,6 +221,16 @@ class AppDatabase {
               created_at TEXT NOT NULL
             )
           ''');
+        }
+        if (oldVersion < 5) {
+          // Tombstone flag: deletes stay in the table so they sync, and every
+          // read filters them out.
+          await db.execute(
+            'ALTER TABLE fee_types ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute(
+            'ALTER TABLE expenses ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0',
+          );
         }
       },
     );

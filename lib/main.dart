@@ -5,6 +5,7 @@ import 'data/children_store.dart';
 import 'data/expenses_store.dart';
 import 'data/fee_types_store.dart';
 import 'data/settings_store.dart';
+import 'data/sync/auto_sync.dart';
 import 'data/sync/sync_server.dart';
 import 'data/sync/sync_service.dart';
 import 'theme/app_theme.dart';
@@ -67,9 +68,14 @@ class _AppStartupState extends State<_AppStartup> {
     // been switched off in Settings) — no timers, the phone does the
     // calling. A failure to bind a port is shown in Settings/dashboard
     // rather than blocking the app.
-    if (SettingsStore.instance.isDesktop &&
-        SettingsStore.instance.syncServerEnabled) {
-      await SyncServer.instance.start();
+    if (SettingsStore.instance.isDesktop) {
+      if (SettingsStore.instance.syncServerEnabled) {
+        await SyncServer.instance.start();
+      }
+    } else {
+      // The phone drives sync: push shortly after any local edit, and
+      // poll for the desktop's changes while the app is open.
+      AutoSync.instance.start();
     }
   }
 
