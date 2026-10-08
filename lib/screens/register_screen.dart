@@ -930,9 +930,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _captureImage({required void Function(String path) onCaptured}) async {
     try {
       if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-        final result = await FilePicker.platform.pickFiles(type: FileType.image);
-        if (result != null && result.files.single.path != null) {
-          setState(() => onCaptured(result.files.single.path!));
+        final files = await FilePicker.pickFiles(type: FileType.image);
+        if (files.isNotEmpty && files.single.path != null) {
+          setState(() => onCaptured(files.single.path!));
         }
         return;
       }
@@ -1472,9 +1472,9 @@ class _ImmunizationGalleryDialogState
     setState(() => _isAdding = true);
     try {
       if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-        final result = await FilePicker.platform.pickFiles(type: FileType.image);
-        if (result != null && result.files.single.path != null && mounted) {
-          setState(() => _paths.add(result.files.single.path!));
+        final files = await FilePicker.pickFiles(type: FileType.image);
+        if (files.isNotEmpty && files.single.path != null && mounted) {
+          setState(() => _paths.add(files.single.path!));
         }
         return;
       }
