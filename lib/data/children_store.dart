@@ -43,6 +43,15 @@ class ChildrenStore extends ChangeNotifier {
     await _refresh();
   }
 
+  /// Persists several changed children at once (e.g. a bulk attendance mark)
+  /// and refreshes the cache a single time instead of once per child.
+  Future<void> updateChildren(Iterable<Child> updated) async {
+    for (final child in updated) {
+      await ChildrenRepository.instance.update(child);
+    }
+    await _refresh();
+  }
+
   Child? byId(String id) {
     for (final c in _children) {
       if (c.id == id) return c;
