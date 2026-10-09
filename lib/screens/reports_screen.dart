@@ -8,6 +8,7 @@ import '../data/settings_store.dart';
 import '../models/child.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
+import '../widgets/child_avatar.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -286,18 +287,7 @@ class _BillingRow extends StatelessWidget {
       decoration: cardDecoration(),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.primary,
-            child: Text(
-              child.initials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          ChildAvatar(child: child, radius: 18, fontSize: 12),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

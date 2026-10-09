@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:open_file/open_file.dart';
+import 'package:uuid/uuid.dart';
 import '../data/children_store.dart';
+import '../data/document_storage.dart';
 import '../data/formatters.dart';
 import '../data/document_printing.dart';
 import '../data/settings_store.dart';
@@ -11,6 +13,8 @@ import '../models/authorized_pickup.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/immunization_gallery.dart';
+import '../widgets/log_payment_sheet.dart';
 import 'child_profile_editors.dart';
 
 enum _Tab { info, guardians, documents, attendance, payments }
@@ -56,19 +60,8 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     }
   }
 
-  String? _childPhotoPath(Child child) {
-    for (final document in child.documents) {
-      if (document.type == DocumentType.photo &&
-          document.label.toLowerCase().contains('child') &&
-          document.status == DocumentStatus.onFile) {
-        return document.filePath;
-      }
-    }
-    return null;
-  }
-
   Widget _profileAvatar(Child child) {
-    final photoPath = _childPhotoPath(child);
+    final photoPath = child.photoPath;
     Widget initials() => Center(
           child: Text(
             child.initials,
@@ -310,16 +303,6 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     await _persist(_child.copyWith(guardians: list), 'Guardian updated.');
   }
 
-  Future<void> _deleteGuardian(Guardian guardian) async {
-    final confirmed = await _confirm(
-      'Remove guardian?',
-      'Remove ${guardian.name} from ${_child.firstName}?',
-    );
-    if (!confirmed || !mounted) return;
-    final list = _child.guardians.where((g) => g.id != guardian.id).toList();
-    await _persist(_child.copyWith(guardians: list), 'Guardian removed.');
-  }
-
   Future<void> _addDocument() async {
     final document = await showDocumentEditorSheet(context);
     if (document == null || !mounted) return;
@@ -338,62 +321,73 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
     await _persist(_child.copyWith(documents: list), 'Document updated.');
   }
 
-  Future<void> _deleteDocument(ChildDocument document) async {
-    final confirmed = await _confirm(
-      'Remove document?',
-      'Remove "${document.label}" from ${_child.firstName}?',
+  Future<void> _editImmunizationPages() async {
+    final existing = _child.documents
+        .where((d) =>
+            d.type == DocumentType.immunization &&
+            (d.filePath ?? '').isNotEmpty)
+        .toList();
+    final pages = await showImmunizationGallery(
+      context,
+      initialPages: [
+        for (final doc in existing)
+          ImmunizationPage(id: doc.id, path: doc.filePath!, sha256: doc.sha256),
+      ],
     );
-    if (!confirmed || !mounted) return;
-    final list = _child.documents.where((d) => d.id != document.id).toList();
-    await _persist(_child.copyWith(documents: list), 'Document removed.');
+    if (pages == null || !mounted) return;
+
+    final keptIds = <String>{
+      for (final page in pages)
+        if (page.id != null) page.id!,
+    };
+
+    // Keep every non-immunization document and the immunization pages the
+    // user left in the gallery; anything else is dropped.
+    final documents = _child.documents.where((doc) {
+      if (doc.type != DocumentType.immunization) return true;
+      return keptIds.contains(doc.id);
+    }).toList();
+
+    final now = DateTime.now();
+    const uuid = Uuid();
+    var saved = 0;
+    for (final page in pages) {
+      if (page.id != null) continue;
+      try {
+        final bytes = await File(page.path).readAsBytes();
+        final (path, hash) = await DocumentStorage.save(
+          bytes: bytes,
+          filename: 'immunization_${now.millisecondsSinceEpoch}.jpg',
+        );
+        documents.add(ChildDocument(
+          id: uuid.v4(),
+          label: 'Immunization record',
+          type: DocumentType.immunization,
+          uploadedAt: now,
+          status: DocumentStatus.onFile,
+          filePath: path,
+          sha256: hash,
+        ));
+        saved++;
+      } catch (error) {
+        if (mounted) {
+          showAppFeedback(
+            context,
+            message: 'Could not save an immunization page. $error',
+            kind: AppFeedbackKind.error,
+          );
+        }
+      }
+    }
+
+    await _persist(
+      _child.copyWith(documents: documents),
+      saved == 0 ? 'Immunization records updated.' : 'Immunization pages saved.',
+    );
   }
 
   Future<void> _addPayment() async {
-    final payment = await showPaymentEditorSheet(context);
-    if (payment == null || !mounted) return;
-    await _persist(
-      _child.copyWith(payments: [..._child.payments, payment]),
-      'Payment logged.',
-    );
-  }
-
-  Future<void> _editPayment(PaymentRecord payment) async {
-    final updated = await showPaymentEditorSheet(context, payment: payment);
-    if (updated == null || !mounted) return;
-    final list =
-        _child.payments.map((p) => p.id == payment.id ? updated : p).toList();
-    await _persist(_child.copyWith(payments: list), 'Payment updated.');
-  }
-
-  Future<void> _deletePayment(PaymentRecord payment) async {
-    final confirmed = await _confirm(
-      'Remove payment?',
-      'Remove "${payment.description}" (${formatEtb(payment.amount)})?',
-    );
-    if (!confirmed || !mounted) return;
-    final list = _child.payments.where((p) => p.id != payment.id).toList();
-    await _persist(_child.copyWith(payments: list), 'Payment removed.');
-  }
-
-  Future<bool> _confirm(String title, String message) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    return result == true;
+    await showLogPaymentSheet(context, initialChildId: _child.id);
   }
 
   Future<void> _persist(Child updated, String message) async {
@@ -594,20 +588,17 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                       onRemovePickup: _removePickupPerson,
                       onAddGuardian: _addGuardian,
                       onEditGuardian: _editGuardian,
-                      onDeleteGuardian: _deleteGuardian,
                     ),
                   _Tab.documents => _DocumentsTab(
                       child: child,
                       onAdd: _addDocument,
                       onEdit: _editDocument,
-                      onDelete: _deleteDocument,
+                      onEditImmunization: _editImmunizationPages,
                     ),
                   _Tab.attendance => _AttendanceTab(child: child),
                   _Tab.payments => _PaymentsTab(
                       child: child,
                       onAdd: _addPayment,
-                      onEdit: _editPayment,
-                      onDelete: _deletePayment,
                     ),
                 },
               ),
@@ -778,7 +769,6 @@ class _GuardiansTab extends StatelessWidget {
   final ValueChanged<AuthorizedPickup> onRemovePickup;
   final VoidCallback onAddGuardian;
   final ValueChanged<Guardian> onEditGuardian;
-  final ValueChanged<Guardian> onDeleteGuardian;
 
   const _GuardiansTab({
     required this.child,
@@ -786,7 +776,6 @@ class _GuardiansTab extends StatelessWidget {
     required this.onRemovePickup,
     required this.onAddGuardian,
     required this.onEditGuardian,
-    required this.onDeleteGuardian,
   });
 
   @override
@@ -882,13 +871,6 @@ class _GuardiansTab extends StatelessWidget {
                       visualDensity: VisualDensity.compact,
                       onPressed: () => onEditGuardian(g),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          size: 18, color: AppColors.danger),
-                      tooltip: 'Remove guardian',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => onDeleteGuardian(g),
-                    ),
                   ],
                 ),
               ),
@@ -974,12 +956,12 @@ class _DocumentsTab extends StatelessWidget {
   final Child child;
   final VoidCallback onAdd;
   final ValueChanged<ChildDocument> onEdit;
-  final ValueChanged<ChildDocument> onDelete;
+  final VoidCallback onEditImmunization;
   const _DocumentsTab({
     required this.child,
     required this.onAdd,
     required this.onEdit,
-    required this.onDelete,
+    required this.onEditImmunization,
   });
 
   static const _icons = <DocumentType, IconData>{
@@ -1008,6 +990,14 @@ class _DocumentsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDesktop = SettingsStore.instance.isDesktop;
+    final immunizationCount = child.documents
+        .where((d) =>
+            d.type == DocumentType.immunization &&
+            (d.filePath ?? '').isNotEmpty)
+        .length;
+    final otherDocuments = child.documents
+        .where((d) => d.type != DocumentType.immunization)
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1028,12 +1018,53 @@ class _DocumentsTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (child.documents.isEmpty)
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: cardDecoration(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onEditImmunization,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.medical_services_outlined,
+                    size: 20,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Immunization pages', style: AppText.bodyMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          immunizationCount == 0
+                              ? 'Not captured — tap to add'
+                              : '$immunizationCount page(s) — tap to change',
+                          style: AppText.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: AppColors.mutedForeground,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (otherDocuments.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Text(
-              'No documents on file yet. Tap Add to attach immunization '
-              'records, IDs, or photos.',
+              'No other documents on file yet. Tap Add to attach IDs, '
+              'registration forms, or photos.',
               style: AppText.caption,
             ),
           )
@@ -1042,9 +1073,9 @@ class _DocumentsTab extends StatelessWidget {
       decoration: cardDecoration(),
       clipBehavior: Clip.antiAlias,
       child: Column(
-        children: List.generate(child.documents.length, (i) {
-          final doc = child.documents[i];
-          final isLast = i == child.documents.length - 1;
+        children: List.generate(otherDocuments.length, (i) {
+          final doc = otherDocuments[i];
+          final isLast = i == otherDocuments.length - 1;
           final (bg, fg) = _statusColors(doc.status);
           final canOpen = doc.filePath != null && doc.filePath!.isNotEmpty;
           return InkWell(
@@ -1108,11 +1139,9 @@ class _DocumentsTab extends StatelessWidget {
                         size: 18, color: AppColors.mutedForeground),
                     onSelected: (value) {
                       if (value == 'edit') onEdit(doc);
-                      if (value == 'delete') onDelete(doc);
                     },
                     itemBuilder: (_) => const [
                       PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Remove')),
                     ],
                   ),
                   const SizedBox(width: 8),
@@ -1305,13 +1334,9 @@ class _AttendanceTab extends StatelessWidget {
 class _PaymentsTab extends StatelessWidget {
   final Child child;
   final VoidCallback onAdd;
-  final ValueChanged<PaymentRecord> onEdit;
-  final ValueChanged<PaymentRecord> onDelete;
   const _PaymentsTab({
     required this.child,
     required this.onAdd,
-    required this.onEdit,
-    required this.onDelete,
   });
 
   (Color, Color, String) _statusDisplay(PaymentRecord p) {
@@ -1349,6 +1374,11 @@ class _PaymentsTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
+        Text(
+          'Edit or remove payments from the Billing screen.',
+          style: AppText.caption,
+        ),
+        const SizedBox(height: 12),
         if (child.payments.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
@@ -1359,76 +1389,63 @@ class _PaymentsTab extends StatelessWidget {
           )
         else
           Container(
-      decoration: cardDecoration(),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: List.generate(child.payments.length, (i) {
-          final p = child.payments[i];
-          final isLast = i == child.payments.length - 1;
-          final (bg, fg, label) = _statusDisplay(p);
-          return InkWell(
-            onTap: () => onEdit(p),
-            child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: BoxDecoration(
-              border: isLast
-                  ? null
-                  : const Border(bottom: BorderSide(color: AppColors.border)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            decoration: cardDecoration(),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: List.generate(child.payments.length, (i) {
+                final p = child.payments[i];
+                final isLast = i == child.payments.length - 1;
+                final (bg, fg, label) = _statusDisplay(p);
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    border: isLast
+                        ? null
+                        : const Border(
+                            bottom: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
                     children: [
-                      Text(p.description, style: AppText.bodyMedium),
-                      Text(formatDate(p.dueDate), style: AppText.caption),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p.description, style: AppText.bodyMedium),
+                            Text(formatDate(p.dueDate), style: AppText.caption),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(formatEtb(p.amount),
+                              style: AppText.bodyMedium
+                                  .copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: bg,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              label,
+                              style: AppText.monoCaption.copyWith(
+                                  color: fg,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(formatEtb(p.amount),
-                        style: AppText.bodyMedium
-                            .copyWith(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: bg,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                      child: Text(
-                        label,
-                        style: AppText.monoCaption.copyWith(
-                            color: fg, fontWeight: FontWeight.w600, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                PopupMenuButton<String>(
-                  tooltip: 'Payment actions',
-                  icon: const Icon(Icons.more_vert,
-                      size: 18, color: AppColors.mutedForeground),
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit(p);
-                    if (value == 'delete') onDelete(p);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'delete', child: Text('Remove')),
-                  ],
-                ),
-              ],
+                );
+              }),
             ),
           ),
-          );
-        }),
-      ),
-    ),
       ],
     );
   }

@@ -391,6 +391,19 @@ class Child {
     return (f + l).toUpperCase();
   }
 
+  /// Path to the child's own photo on file, if one has been captured and
+  /// stored locally. Falls back to null so callers can show initials.
+  String? get photoPath {
+    for (final document in documents) {
+      if (document.type == DocumentType.photo &&
+          document.label.toLowerCase().contains('child') &&
+          document.status == DocumentStatus.onFile) {
+        return document.filePath;
+      }
+    }
+    return null;
+  }
+
   /// Age in whole months — used for age-based fee rate lookups.
   int get ageInMonths {
     final now = DateTime.now();

@@ -428,25 +428,44 @@ class _DocumentEditorSheetState extends State<_DocumentEditorSheet> {
   }
 
   void _save() {
-    final label = _label.text.trim();
-    if (label.isEmpty) {
-      setState(() => _error = 'Give the document a name.');
-      return;
-    }
     final hasFile = _filePath != null && _filePath!.isNotEmpty;
     final base = widget.document;
+    if (base == null) {
+      final label = _label.text.trim();
+      if (label.isEmpty) {
+        setState(() => _error = 'Give the document a name.');
+        return;
+      }
+      Navigator.of(context).pop(
+        ChildDocument(
+          id: const Uuid().v4(),
+          label: label,
+          type: _type,
+          uploadedAt: DateTime.now(),
+          status: hasFile
+              ? _status
+              : (_status == DocumentStatus.onFile
+                  ? DocumentStatus.pending
+                  : _status),
+          filePath: _filePath,
+          sha256: _sha256,
+          printed: true,
+        ),
+      );
+      return;
+    }
+    // Editing only replaces the attached file — the name, type and status
+    // were fixed when the document was created.
     Navigator.of(context).pop(
       ChildDocument(
-        id: base?.id ?? const Uuid().v4(),
-        label: label,
-        type: _type,
-        uploadedAt: base?.uploadedAt ?? DateTime.now(),
-        status: hasFile ? _status : (_status == DocumentStatus.onFile
-            ? DocumentStatus.pending
-            : _status),
+        id: base.id,
+        label: base.label,
+        type: base.type,
+        uploadedAt: base.uploadedAt,
+        status: hasFile ? DocumentStatus.onFile : base.status,
         filePath: _filePath,
         sha256: _sha256,
-        printed: base?.printed ?? true,
+        printed: base.printed,
       ),
     );
   }
@@ -454,40 +473,53 @@ class _DocumentEditorSheetState extends State<_DocumentEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final hasFile = _filePath != null && _filePath!.isNotEmpty;
+    const typeItems = <(DocumentType, String)>[
+      (DocumentType.id, 'ID'),
+      (DocumentType.photo, 'Photo'),
+      (DocumentType.registration, 'Registration form'),
+      (DocumentType.other, 'Other'),
+    ];
     return _SheetScaffold(
       title: _isNew ? 'Add document' : 'Edit document',
       onSave: _save,
       error: _error,
       children: [
-        TextField(
-          controller: _label,
-          decoration: const InputDecoration(labelText: 'Document name'),
-        ),
-        const SizedBox(height: 12),
-        _ChoiceRow<DocumentType>(
-          label: 'Type',
-          value: _type,
-          items: const [
-            (DocumentType.immunization, 'Immunization'),
-            (DocumentType.id, 'ID'),
-            (DocumentType.photo, 'Photo'),
-            (DocumentType.registration, 'Registration form'),
-            (DocumentType.other, 'Other'),
-          ],
-          onChanged: (t) => setState(() => _type = t),
-        ),
-        const SizedBox(height: 12),
-        _ChoiceRow<DocumentStatus>(
-          label: 'Status',
-          value: _status,
-          items: const [
-            (DocumentStatus.onFile, 'On file'),
-            (DocumentStatus.pending, 'Pending'),
-            (DocumentStatus.expired, 'Expired'),
-          ],
-          onChanged: (s) => setState(() => _status = s),
-        ),
-        const SizedBox(height: 16),
+        if (_isNew) ...[
+          TextField(
+            controller: _label,
+            decoration: const InputDecoration(labelText: 'Document name'),
+          ),
+          const SizedBox(height: 12),
+          _ChoiceRow<DocumentType>(
+            label: 'Type',
+            value: _type,
+            items: typeItems,
+            onChanged: (t) => setState(() => _type = t),
+          ),
+          const SizedBox(height: 12),
+          _ChoiceRow<DocumentStatus>(
+            label: 'Status',
+            value: _status,
+            items: const [
+              (DocumentStatus.onFile, 'On file'),
+              (DocumentStatus.pending, 'Pending'),
+              (DocumentStatus.expired, 'Expired'),
+            ],
+            onChanged: (s) => setState(() => _status = s),
+          ),
+          const SizedBox(height: 16),
+        ] else ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.muted,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(widget.document!.label, style: AppText.bodyRegular),
+          ),
+          const SizedBox(height: 16),
+        ],
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -527,11 +559,26 @@ class _DocumentEditorSheetState extends State<_DocumentEditorSheet> {
 // Payment
 // ---------------------------------------------------------------------
 
-Future<PaymentRecord?> showPaymentEditorSheet(
+/// Outcome of the payment editor: either a saved record, or a request to
+/// remove the existing one. Keeps the destructive action inside the editor
+/// instead of cluttering every list row with a delete button.
+class PaymentEditResult {
+  final PaymentRecord? payment;
+  final bool deleteRequested;
+
+  const PaymentEditResult.saved(PaymentRecord this.payment)
+      : deleteRequested = false;
+
+  const PaymentEditResult.delete()
+      : payment = null,
+        deleteRequested = true;
+}
+
+Future<PaymentEditResult?> showPaymentEditorSheet(
   BuildContext context, {
   PaymentRecord? payment,
 }) {
-  return showModalBottomSheet<PaymentRecord>(
+  return showModalBottomSheet<PaymentEditResult>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _PaymentEditorSheet(payment: payment),
@@ -604,15 +651,17 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
     final base = widget.payment;
     final paidNow = _status == PaymentStatus.paid;
     Navigator.of(context).pop(
-      PaymentRecord(
-        id: base?.id ?? const Uuid().v4(),
-        feeTypeName: feeName.isEmpty ? description : feeName,
-        description: description.isEmpty ? feeName : description,
-        amount: amount,
-        status: _status,
-        dueDate: _dueDate,
-        paidAt: paidNow ? (base?.paidAt ?? DateTime.now()) : null,
-        cycleLabel: base?.cycleLabel,
+      PaymentEditResult.saved(
+        PaymentRecord(
+          id: base?.id ?? const Uuid().v4(),
+          feeTypeName: feeName.isEmpty ? description : feeName,
+          description: description.isEmpty ? feeName : description,
+          amount: amount,
+          status: _status,
+          dueDate: _dueDate,
+          paidAt: paidNow ? (base?.paidAt ?? DateTime.now()) : null,
+          cycleLabel: base?.cycleLabel,
+        ),
       ),
     );
   }
@@ -623,6 +672,10 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
       title: _isNew ? 'Log payment' : 'Edit payment',
       onSave: _save,
       error: _error,
+      onDelete: _isNew
+          ? null
+          : () => Navigator.of(context).pop(const PaymentEditResult.delete()),
+      deleteLabel: 'Delete payment',
       children: [
         TextField(
           controller: _feeName,
@@ -678,12 +731,16 @@ class _SheetScaffold extends StatelessWidget {
   final List<Widget> children;
   final VoidCallback onSave;
   final String? error;
+  final VoidCallback? onDelete;
+  final String deleteLabel;
 
   const _SheetScaffold({
     required this.title,
     required this.children,
     required this.onSave,
     this.error,
+    this.onDelete,
+    this.deleteLabel = 'Delete',
   });
 
   @override
@@ -722,6 +779,23 @@ class _SheetScaffold extends StatelessWidget {
                 child: const Text('Save'),
               ),
             ),
+            if (onDelete != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(deleteLabel),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                    side: BorderSide(
+                      color: AppColors.danger.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

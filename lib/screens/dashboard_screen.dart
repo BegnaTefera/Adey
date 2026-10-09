@@ -3,6 +3,7 @@ import '../data/children_store.dart';
 import '../data/formatters.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
+import '../widgets/child_avatar.dart';
 import '../widgets/sync_status_card.dart';
 import 'attendance_screen.dart';
 import 'billing_screen.dart';
@@ -246,15 +247,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: AppColors.primary,
-                            child: Text(child.initials,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                          ),
+                          ChildAvatar(
+                              child: child, radius: 16, fontSize: 12),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(

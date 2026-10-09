@@ -6,6 +6,7 @@ import '../data/print_queue.dart';
 import '../data/sync/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/child_avatar.dart';
 
 /// Desktop only: signed registration forms that came in from the phone and
 /// still need their first print. Printing hands the stored bytes to the OS
@@ -117,18 +118,7 @@ class _PrintQueueScreenState extends State<PrintQueueScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: AppColors.primary,
-            child: Text(
-              item.child.initials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          ChildAvatar(child: item.child, radius: 20, fontSize: 14),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

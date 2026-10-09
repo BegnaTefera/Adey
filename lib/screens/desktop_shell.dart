@@ -18,11 +18,11 @@ import 'settings_screen.dart';
 enum _DesktopTab {
   dashboard,
   children,
-  printQueue,
   attendance,
   billing,
-  reports,
   expenses,
+  reports,
+  printQueue,
   settings,
 }
 
@@ -158,14 +158,6 @@ class _DesktopShellState extends State<DesktopShell> {
                         onTap: () => setState(() => _activeTab = _DesktopTab.children),
                       ),
                       _SidebarItem(
-                        icon: Icons.print_outlined,
-                        activeIcon: Icons.print,
-                        label: 'Print Queue',
-                        badgeCount: printQueueCount,
-                        active: _activeTab == _DesktopTab.printQueue,
-                        onTap: () => setState(() => _activeTab = _DesktopTab.printQueue),
-                      ),
-                      _SidebarItem(
                         icon: Icons.calendar_today_outlined,
                         activeIcon: Icons.calendar_today,
                         label: 'Attendance',
@@ -180,6 +172,13 @@ class _DesktopShellState extends State<DesktopShell> {
                         onTap: () => setState(() => _activeTab = _DesktopTab.billing),
                       ),
                       _SidebarItem(
+                        icon: Icons.payments_outlined,
+                        activeIcon: Icons.payments,
+                        label: 'Expenses',
+                        active: _activeTab == _DesktopTab.expenses,
+                        onTap: () => setState(() => _activeTab = _DesktopTab.expenses),
+                      ),
+                      _SidebarItem(
                         icon: Icons.stacked_bar_chart_outlined,
                         activeIcon: Icons.stacked_bar_chart,
                         label: 'Reports',
@@ -187,11 +186,12 @@ class _DesktopShellState extends State<DesktopShell> {
                         onTap: () => setState(() => _activeTab = _DesktopTab.reports),
                       ),
                       _SidebarItem(
-                        icon: Icons.payments_outlined,
-                        activeIcon: Icons.payments,
-                        label: 'Expenses',
-                        active: _activeTab == _DesktopTab.expenses,
-                        onTap: () => setState(() => _activeTab = _DesktopTab.expenses),
+                        icon: Icons.print_outlined,
+                        activeIcon: Icons.print,
+                        label: 'Print Queue',
+                        badgeCount: printQueueCount,
+                        active: _activeTab == _DesktopTab.printQueue,
+                        onTap: () => setState(() => _activeTab = _DesktopTab.printQueue),
                       ),
                       _SidebarItem(
                         icon: Icons.settings_outlined,

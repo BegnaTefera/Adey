@@ -3,6 +3,7 @@ import '../models/child.dart';
 import '../data/children_store.dart';
 import '../data/search_utils.dart';
 import '../theme/app_theme.dart';
+import '../widgets/child_avatar.dart';
 import 'child_profile_screen.dart';
 
 enum _StatusFilter { enrolled, withdrawn, all }
@@ -129,26 +130,32 @@ class _ChildrenScreenState extends State<ChildrenScreen> {
               ),
               const SizedBox(height: 12),
 
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
                 children: [
-                  _FilterPill(
-                    label: 'Enrolled ($enrolledCount)',
-                    selected: _filter == _StatusFilter.enrolled,
-                    onTap: () =>
-                        setState(() => _filter = _StatusFilter.enrolled),
+                  Expanded(
+                    child: _FilterPill(
+                      label: 'Enrolled ($enrolledCount)',
+                      selected: _filter == _StatusFilter.enrolled,
+                      onTap: () =>
+                          setState(() => _filter = _StatusFilter.enrolled),
+                    ),
                   ),
-                  _FilterPill(
-                    label: 'Withdrawn ($withdrawnCount)',
-                    selected: _filter == _StatusFilter.withdrawn,
-                    onTap: () =>
-                        setState(() => _filter = _StatusFilter.withdrawn),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _FilterPill(
+                      label: 'Withdrawn ($withdrawnCount)',
+                      selected: _filter == _StatusFilter.withdrawn,
+                      onTap: () =>
+                          setState(() => _filter = _StatusFilter.withdrawn),
+                    ),
                   ),
-                  _FilterPill(
-                    label: 'All',
-                    selected: _filter == _StatusFilter.all,
-                    onTap: () => setState(() => _filter = _StatusFilter.all),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _FilterPill(
+                      label: 'All',
+                      selected: _filter == _StatusFilter.all,
+                      onTap: () => setState(() => _filter = _StatusFilter.all),
+                    ),
                   ),
                 ],
               ),
@@ -202,17 +209,7 @@ class _ChildrenScreenState extends State<ChildrenScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 20,
-                                    backgroundColor: AppColors.primary,
-                                    child: Text(
-                                      child.initials,
-                                      style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600),
-                                    ),
-                                  ),
+                                  ChildAvatar(child: child, radius: 20),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(

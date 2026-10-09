@@ -5,6 +5,7 @@ import '../data/children_store.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/child_avatar.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -90,14 +91,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             decoration: cardDecoration(),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primary,
-                  child: Text(
-                    child.initials,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
-                ),
+                ChildAvatar(child: child, radius: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

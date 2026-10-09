@@ -23,30 +23,23 @@ int levenshteinDistance(String a, String b) {
   if (a.isEmpty) return b.length;
   if (b.isEmpty) return a.length;
 
-  final previous = List<int>.filled(b.length + 1, 0);
-  final current = List<int>.filled(b.length + 1, 0);
-
-  for (var j = 0; j <= b.length; j++) {
-    previous[j] = j;
-  }
+  var previous = List<int>.generate(b.length + 1, (j) => j);
+  var current = List<int>.filled(b.length + 1, 0);
 
   for (var i = 1; i <= a.length; i++) {
     current[0] = i;
     for (var j = 1; j <= b.length; j++) {
       final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-      current[j] = [
-        previous[j] + 1,
-        current[j - 1] + 1,
-        previous[j - 1] + cost,
-      ].reduce((x, y) => x < y ? x : y);
+      final deletion = previous[j] + 1;
+      final insertion = current[j - 1] + 1;
+      final substitution = previous[j - 1] + cost;
+      var best = deletion < insertion ? deletion : insertion;
+      if (substitution < best) best = substitution;
+      current[j] = best;
     }
     final swap = previous;
-    previous
-      ..clear()
-      ..addAll(current);
-    current
-      ..clear()
-      ..addAll(swap);
+    previous = current;
+    current = swap;
   }
 
   return previous[b.length];

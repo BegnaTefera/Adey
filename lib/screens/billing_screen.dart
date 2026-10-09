@@ -3,11 +3,13 @@ import 'package:uuid/uuid.dart';
 import '../data/children_store.dart';
 import '../data/fee_types_store.dart';
 import '../data/formatters.dart';
-import '../data/search_utils.dart';
 import '../models/child.dart';
 import '../models/fee_type.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/child_avatar.dart';
+import '../widgets/log_payment_sheet.dart';
+import 'child_profile_editors.dart';
 
 class BillingScreen extends StatefulWidget {
   final String? registeredChildId;
@@ -50,7 +52,7 @@ class _BillingScreenState extends State<BillingScreen> {
         ? ChildrenStore.instance.children.where((child) => child.payments.any((p) => p.isOverdue)).toList()
         : ChildrenStore.instance.children;
 
-    final totalOutstanding = children.fold<double>(0, (sum, child) {
+    final totalOverdue = children.fold<double>(0, (sum, child) {
       return sum + child.payments.where((p) => p.isOverdue).fold<double>(0, (inner, p) => inner + p.amount);
     });
 
@@ -62,7 +64,8 @@ class _BillingScreenState extends State<BillingScreen> {
         title: Text('Billing', style: AppText.sectionTitle),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _logPayment(
+        onPressed: () => showLogPaymentSheet(
+          context,
           initialChildId: widget.registeredChildId,
         ),
         backgroundColor: AppColors.primary,
@@ -73,239 +76,80 @@ class _BillingScreenState extends State<BillingScreen> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
         children: [
           if (registeredChild != null) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.syncSoft,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.sync.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_outline, color: AppColors.sync),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Registration complete', style: AppText.bodyMedium),
-                        Text(
-                          '${registeredChild.fullName} is enrolled.',
-                          style: AppText.caption,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Log a payment for ${registeredChild.fullName}',
-                    onPressed: () => _logPayment(
-                      initialChildId: registeredChild.id,
-                    ),
-                    icon: const Icon(Icons.add_card_outlined),
-                  ),
-                ],
+            _RegistrationBanner(
+              child: registeredChild,
+              onLogPayment: () => showLogPaymentSheet(
+                context,
+                initialChildId: registeredChild.id,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
           ],
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: cardDecoration(),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Outstanding', style: AppText.caption),
-                Text(
-                  formatEtb(totalOutstanding),
-                  style: AppText.pageTitle.copyWith(color: AppColors.danger),
-                ),
-              ],
+          _TotalCard(label: 'Overdue total', amount: totalOverdue),
+          const SizedBox(height: 24),
+          _SectionHeader(
+            title: 'Fee types',
+            action: TextButton.icon(
+              onPressed: () => _editFeeType(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add fee type'),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: Text('Fee types', style: AppText.monoLabel)),
-              TextButton.icon(
-                onPressed: () => _editFeeType(),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add fee type'),
-              ),
-            ],
           ),
           const SizedBox(height: 12),
           if (feeTypes.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: cardDecoration(),
-              child: Text(
-                'No fee types yet. Add at least one before registering a child or logging a payment.',
-                style: AppText.caption,
-              ),
+            const _EmptyCard(
+              text: 'No fee types yet. Add at least one before registering a '
+                  'child or logging a payment.',
             )
           else
-            ...feeTypes.map(
-            (fee) {
-              final expanded = _expandedFeeTypes.contains(fee.id);
-              final kindLabel = fee.chargeOnRegistration
-                  ? 'At registration'
-                  : fee.recurring
-                      ? 'Recurring'
-                      : 'One-off';
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: cardDecoration(),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    InkWell(
-                      onTap: () => setState(() {
-                        if (expanded) {
-                          _expandedFeeTypes.remove(fee.id);
-                        } else {
-                          _expandedFeeTypes.add(fee.id);
-                        }
-                      }),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(fee.name, style: AppText.bodyMedium),
-                                  const SizedBox(height: 2),
-                                  Text(kindLabel, style: AppText.caption),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Delete ${fee.name}',
-                              onPressed: () => _deleteFeeType(fee),
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: AppColors.danger,
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Edit ${fee.name}',
-                              onPressed: () => _editFeeType(fee),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            Icon(
-                              expanded
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              color: AppColors.mutedForeground,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (expanded)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Column(
-                          children: [
-                            ...fee.rates.map(
-                              (bracket) => Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(bracket.label, style: AppText.caption),
-                                    Text(
-                                      formatEtb(bracket.rate),
-                                      style: AppText.bodyMedium.copyWith(
-                                          color: AppColors.primary),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-          if (feeTypes.isNotEmpty) const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: Text('Child balances', style: AppText.monoLabel)),
-              Switch(
-                value: _showOverdueOnly,
-                onChanged: (value) => setState(() => _showOverdueOnly = value),
-                activeThumbColor: AppColors.primary,
+            for (final fee in feeTypes) ...[
+              _FeeTypeCard(
+                key: ValueKey('fee-${fee.id}'),
+                fee: fee,
+                expanded: _expandedFeeTypes.contains(fee.id),
+                onToggle: () => setState(() {
+                  if (_expandedFeeTypes.contains(fee.id)) {
+                    _expandedFeeTypes.remove(fee.id);
+                  } else {
+                    _expandedFeeTypes.add(fee.id);
+                  }
+                }),
+                onEdit: () => _editFeeType(fee),
+                onDelete: () => _deleteFeeType(fee),
               ),
+              const SizedBox(height: 12),
             ],
+          const SizedBox(height: 12),
+          _SectionHeader(
+            title: 'Child balances',
+            action: _OverdueToggle(
+              value: _showOverdueOnly,
+              onChanged: (value) => setState(() => _showOverdueOnly = value),
+            ),
           ),
           const SizedBox(height: 12),
           if (children.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: Text('No overdue balances', style: AppText.caption),
+                child: Text(
+                  _showOverdueOnly
+                      ? 'No overdue balances'
+                      : 'No children to bill yet',
+                  style: AppText.caption,
+                ),
               ),
-            ),
-          ...children.map(
-            (child) => Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: cardDecoration(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: AppColors.primary,
-                        child: Text(
-                          child.initials,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(child.fullName, style: AppText.bodyMedium),
-                      ),
-                      Text(
-                        formatEtb(child.payments.where((p) => p.isOverdue).fold<double>(0, (sum, p) => sum + p.amount)),
-                        style: AppText.bodyMedium.copyWith(color: AppColors.danger),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...child.payments
-                      .where((p) => !_showOverdueOnly || p.isOverdue)
-                      .map(
-                        (payment) => Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(payment.description, style: AppText.caption),
-                              Text(
-                                formatEtb(payment.amount),
-                                style: AppText.caption.copyWith(
-                                  color: payment.isOverdue ? AppColors.danger : AppColors.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                ],
+            )
+          else
+            for (final child in children) ...[
+              _ChildBalanceCard(
+                key: ValueKey('child-${child.id}'),
+                child: child,
+                overdueOnly: _showOverdueOnly,
+                onEditPayment: (payment) => _editPayment(child, payment),
               ),
-            ),
-          ),
+              const SizedBox(height: 12),
+            ],
         ],
       ),
     );
@@ -413,380 +257,118 @@ class _BillingScreenState extends State<BillingScreen> {
     }
   }
 
-  void _logPayment({String? initialChildId}) {
-    final allEnrolledChildren = ChildrenStore.instance.children
-        .where((c) => c.enrollmentStatus == EnrollmentStatus.enrolled)
-        .toList();
-
-    final feeTypes = FeeTypesStore.instance.feeTypes;
-    if (allEnrolledChildren.isEmpty) {
-      showAppFeedback(
-        context,
-        message: 'Enroll a child before logging a payment.',
-        kind: AppFeedbackKind.info,
-      );
+  Future<void> _editPayment(Child child, PaymentRecord payment) async {
+    final result = await showPaymentEditorSheet(context, payment: payment);
+    if (result == null || !mounted) return;
+    if (result.deleteRequested) {
+      await _deletePayment(child, payment);
       return;
     }
-    if (feeTypes.isEmpty) {
-      showAppFeedback(
-        context,
-        message: 'Add a fee type before logging a payment.',
-        kind: AppFeedbackKind.info,
-      );
-      return;
-    }
+    final updated = result.payment!;
+    final payments =
+        child.payments.map((p) => p.id == payment.id ? updated : p).toList();
+    await _persistChild(child.copyWith(payments: payments), 'Payment updated.');
+  }
 
-    Child selectedChild = allEnrolledChildren.firstWhere(
-      (child) => child.id == initialChildId,
-      orElse: () => allEnrolledChildren.first,
-    );
-    final lines = [_PaymentLineDraft(feeTypes.first, selectedChild)];
-    final descriptionController = TextEditingController();
-    final guardianSearchController = TextEditingController();
-    var isSaving = false;
-    String? validationError;
-
-    List<Child> matchingChildren(String query) {
-      final normalizedQuery = normalizeForSearch(query);
-      if (normalizedQuery.isEmpty) return allEnrolledChildren;
-      return allEnrolledChildren.where((c) {
-        final haystacks = <String>[
-          normalizeForSearch(c.fullName),
-          ...c.guardians.map((g) => normalizeForSearch(g.name)),
-          ...c.guardians.map((g) => normalizeForSearch(g.phone)),
-        ];
-        return matchesAllTokens(
-          haystacks: haystacks,
-          normalizedQuery: normalizedQuery,
-        );
-      }).toList();
-    }
-
-    showModalBottomSheet(
+  Future<void> _deletePayment(Child child, PaymentRecord payment) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) {
-          void applySuggestedRatesForChild() {
-            for (final line in lines) {
-              line.applySuggestedAmount(selectedChild);
-            }
-          }
-
-          var filteredChildren = matchingChildren(guardianSearchController.text);
-          if (filteredChildren.isEmpty) filteredChildren = allEnrolledChildren;
-          if (!filteredChildren.contains(selectedChild)) {
-            selectedChild = filteredChildren.first;
-            applySuggestedRatesForChild();
-          }
-
-          double lineTotal() {
-            var sum = 0.0;
-            for (final line in lines) {
-              sum += double.tryParse(line.amount.text.trim()) ?? 0;
-            }
-            return sum;
-          }
-
-          FeeType defaultFeeForNewLine() {
-            final used = lines.map((l) => l.feeType.id).toSet();
-            for (final fee in feeTypes) {
-              if (!used.contains(fee.id)) return fee;
-            }
-            return feeTypes.first;
-          }
-
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              16,
-              16,
-              MediaQuery.of(sheetContext).viewInsets.bottom + 16,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Log payment', style: AppText.sectionTitle),
-                  const SizedBox(height: 16),
-                  Text('Find by guardian name or phone', style: AppText.caption),
-                  const SizedBox(height: 6),
-                  _SheetField(
-                    controller: guardianSearchController,
-                    hint: 'e.g. the name shown on the bank transfer',
-                    onChanged: (_) => setSheetState(() {}),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Matches by child or guardian name — handles small '
-                    'spelling differences and works in Amharic too.',
-                    style: AppText.caption,
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Child', style: AppText.caption),
-                  const SizedBox(height: 6),
-                  _Dropdown<Child>(
-                    value: selectedChild,
-                    items: filteredChildren,
-                    labelBuilder: (c) => c.guardians.isNotEmpty
-                        ? '${c.fullName} (${c.guardians.first.name})'
-                        : c.fullName,
-                    onChanged: (c) {
-                      setSheetState(() {
-                        selectedChild = c;
-                        applySuggestedRatesForChild();
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: Text('Fees in this payment', style: AppText.caption)),
-                      TextButton.icon(
-                        onPressed: lines.length >= feeTypes.length
-                            ? null
-                            : () => setSheetState(() {
-                                  lines.add(
-                                    _PaymentLineDraft(defaultFeeForNewLine(), selectedChild),
-                                  );
-                                }),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add fee'),
-                      ),
-                    ],
-                  ),
-                  for (var i = 0; i < lines.length; i++) ...[
-                    _PaymentLineRow(
-                      line: lines[i],
-                      feeTypes: feeTypes,
-                      selectedChild: selectedChild,
-                      canRemove: lines.length > 1,
-                      onRemove: () => setSheetState(() {
-                        lines.removeAt(i).dispose();
-                      }),
-                      onChanged: () => setSheetState(() {}),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.muted,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Total logged', style: AppText.bodyMedium),
-                        Text(
-                          formatEtb(lineTotal()),
-                          style: AppText.sectionTitle.copyWith(color: AppColors.primary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Note (optional)', style: AppText.caption),
-                  const SizedBox(height: 6),
-                  _SheetField(
-                    controller: descriptionController,
-                    hint: 'Bank reference or receipt note',
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Records money already received — one paid row per fee, '
-                    'total above is the combined amount.',
-                    style: AppText.caption,
-                  ),
-                  if (validationError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      validationError!,
-                      style: AppText.caption.copyWith(color: AppColors.danger),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isSaving
-                          ? null
-                          : () async {
-                              var total = 0.0;
-                              final newPayments = <PaymentRecord>[];
-                              final now = DateTime.now();
-                              final note = descriptionController.text.trim();
-                              const uuid = Uuid();
-
-                              for (final line in lines) {
-                                final amount =
-                                    double.tryParse(line.amount.text.trim()) ?? 0;
-                                if (amount <= 0) {
-                                  setSheetState(() {
-                                    validationError =
-                                        'Each fee needs an amount greater than zero.';
-                                  });
-                                  return;
-                                }
-                                total += amount;
-                                final feeName = line.feeType.name;
-                                newPayments.add(
-                                  PaymentRecord(
-                                    id: uuid.v4(),
-                                    feeTypeName: feeName,
-                                    description: note.isEmpty
-                                        ? feeName
-                                        : '$feeName · $note',
-                                    amount: amount,
-                                    status: PaymentStatus.paid,
-                                    dueDate: now,
-                                    paidAt: now,
-                                  ),
-                                );
-                              }
-
-                              setSheetState(() {
-                                isSaving = true;
-                                validationError = null;
-                              });
-
-                              try {
-                                await ChildrenStore.instance.updateChild(
-                                  selectedChild.copyWith(
-                                    payments: [
-                                      ...selectedChild.payments,
-                                      ...newPayments,
-                                    ],
-                                  ),
-                                );
-                                if (!sheetContext.mounted) return;
-                                Navigator.of(sheetContext).pop();
-                                if (mounted) {
-                                  showAppFeedback(
-                                    context,
-                                    message:
-                                        '${formatEtb(total)} logged for ${selectedChild.fullName}.',
-                                    kind: AppFeedbackKind.success,
-                                  );
-                                }
-                              } catch (error) {
-                                if (!sheetContext.mounted) return;
-                                setSheetState(() => isSaving = false);
-                                setSheetState(() {
-                                  validationError =
-                                      'Could not save the payment. Your entry is still here.';
-                                });
-                                showAppFeedback(
-                                  sheetContext,
-                                  message: '$error',
-                                  kind: AppFeedbackKind.error,
-                                );
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: isSaving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Save payment'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove payment?'),
+        content: Text(
+          'Remove "${payment.description}" (${formatEtb(payment.amount)})?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
       ),
-    ).whenComplete(() {
-      for (final line in lines) {
-        line.dispose();
-      }
-      descriptionController.dispose();
-      guardianSearchController.dispose();
-    });
+    );
+    if (confirmed != true || !mounted) return;
+    final payments =
+        child.payments.where((p) => p.id != payment.id).toList();
+    await _persistChild(child.copyWith(payments: payments), 'Payment removed.');
+  }
+
+  Future<void> _persistChild(Child child, String message) async {
+    try {
+      await ChildrenStore.instance.updateChild(child);
+      if (!mounted) return;
+      showAppFeedback(context, message: message, kind: AppFeedbackKind.success);
+    } catch (error) {
+      if (!mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not save the change. Try again. $error',
+        kind: AppFeedbackKind.error,
+        actionLabel: 'Retry',
+        onAction: () => _persistChild(child, message),
+      );
+    }
   }
 }
 
-class _PaymentLineDraft {
-  FeeType feeType;
-  final TextEditingController amount;
+enum _FeeAction { edit, delete }
 
-  _PaymentLineDraft(this.feeType, Child child)
-      : amount = TextEditingController(
-          text: feeType.rateForAge(child.ageInMonths).toStringAsFixed(0),
-        );
-
-  void applySuggestedAmount(Child child) {
-    amount.text = feeType.rateForAge(child.ageInMonths).toStringAsFixed(0);
+String _feeSummary(FeeType fee) {
+  final rates = fee.rates;
+  if (rates.isEmpty) return 'No rates';
+  if (rates.length == 1) {
+    return '${rates.single.label} · ${formatEtb(rates.single.rate)}';
   }
-
-  void dispose() => amount.dispose();
+  final cheapest = rates.map((r) => r.rate).reduce((a, b) => a < b ? a : b);
+  return '${rates.length} age rules · from ${formatEtb(cheapest)}';
 }
 
-class _PaymentLineRow extends StatelessWidget {
-  final _PaymentLineDraft line;
-  final List<FeeType> feeTypes;
-  final Child selectedChild;
-  final bool canRemove;
-  final VoidCallback onRemove;
-  final VoidCallback onChanged;
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool destructive;
 
-  const _PaymentLineRow({
-    required this.line,
-    required this.feeTypes,
-    required this.selectedChild,
-    required this.canRemove,
-    required this.onRemove,
-    required this.onChanged,
+  const _MenuRow({
+    required this.icon,
+    required this.label,
+    this.destructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final color = destructive ? AppColors.danger : null;
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: color)),
+      ],
+    );
+  }
+}
+
+class _TotalCard extends StatelessWidget {
+  final String label;
+  final double amount;
+
+  const _TotalCard({required this.label, required this.amount});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.all(18),
+      decoration: cardDecoration(),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _Dropdown<FeeType>(
-                  value: line.feeType,
-                  items: feeTypes,
-                  labelBuilder: (fee) =>
-                      '${fee.name} · ${formatEtb(fee.rateForAge(selectedChild.ageInMonths))}',
-                  onChanged: (f) {
-                    line.feeType = f;
-                    line.applySuggestedAmount(selectedChild);
-                    onChanged();
-                  },
-                ),
-              ),
-              if (canRemove)
-                IconButton(
-                  tooltip: 'Remove fee line',
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.close, size: 20),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _SheetField(
-            controller: line.amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => onChanged(),
+          Text(label, style: AppText.caption),
+          Text(
+            formatEtb(amount),
+            style: AppText.pageTitle.copyWith(color: AppColors.danger),
           ),
         ],
       ),
@@ -794,81 +376,341 @@ class _PaymentLineRow extends StatelessWidget {
   }
 }
 
-class _Dropdown<T> extends StatelessWidget {
-  final T value;
-  final List<T> items;
-  final String Function(T) labelBuilder;
-  final ValueChanged<T> onChanged;
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final Widget? action;
 
-  const _Dropdown({
-    required this.value,
-    required this.items,
-    required this.labelBuilder,
-    required this.onChanged,
-  });
+  const _SectionHeader({required this.title, this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Text(title, style: AppText.monoLabel)),
+        if (action != null) action!,
+      ],
+    );
+  }
+}
+
+class _EmptyCard extends StatelessWidget {
+  final String text;
+
+  const _EmptyCard({required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: cardDecoration(),
+      child: Text(text, style: AppText.caption),
+    );
+  }
+}
+
+class _RegistrationBanner extends StatelessWidget {
+  final Child child;
+  final VoidCallback onLogPayment;
+
+  const _RegistrationBanner({required this.child, required this.onLogPayment});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.syncSoft,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.sync.withValues(alpha: 0.3)),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          isExpanded: true,
-          items: items
-              .map((item) => DropdownMenuItem<T>(
-                    value: item,
-                    child: Text(labelBuilder(item), style: AppText.bodyRegular),
-                  ))
-              .toList(),
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline, color: AppColors.sync),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Registration complete', style: AppText.bodyMedium),
+                Text('${child.fullName} is enrolled.', style: AppText.caption),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onLogPayment,
+            child: const Text('Log payment'),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _SheetField extends StatelessWidget {
-  final TextEditingController controller;
-  final TextInputType? keyboardType;
-  final String? hint;
-  final ValueChanged<String>? onChanged;
+class _OverdueToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
-  const _SheetField({
-    required this.controller,
-    this.keyboardType,
-    this.hint,
-    this.onChanged,
-  });
+  const _OverdueToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Show overdue only',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Overdue only', style: AppText.caption),
+          const SizedBox(width: 4),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppColors.primary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverdueChip extends StatelessWidget {
+  const _OverdueChip();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.dangerSoft,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
       ),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        onChanged: onChanged,
-        style: AppText.bodyRegular,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: AppText.caption,
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 14),
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 12, color: AppColors.danger),
+          const SizedBox(width: 4),
+          Text(
+            'Overdue',
+            style: AppText.caption.copyWith(
+              color: AppColors.danger,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeeTypeCard extends StatelessWidget {
+  final FeeType fee;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _FeeTypeCard({
+    super.key,
+    required this.fee,
+    required this.expanded,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final kindLabel = fee.chargeOnRegistration
+        ? 'At registration'
+        : fee.recurring
+            ? 'Recurring'
+            : 'One-off';
+    return Container(
+      decoration: cardDecoration(),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: onToggle,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(fee.name, style: AppText.bodyMedium),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$kindLabel · ${_feeSummary(fee)}',
+                                style: AppText.caption,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          expanded ? Icons.expand_less : Icons.expand_more,
+                          color: AppColors.mutedForeground,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              PopupMenuButton<_FeeAction>(
+                tooltip: 'Actions for ${fee.name}',
+                onSelected: (action) => switch (action) {
+                  _FeeAction.edit => onEdit(),
+                  _FeeAction.delete => onDelete(),
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: _FeeAction.edit,
+                    child: _MenuRow(icon: Icons.edit_outlined, label: 'Edit'),
+                  ),
+                  PopupMenuItem(
+                    value: _FeeAction.delete,
+                    child: _MenuRow(
+                      icon: Icons.delete_outline,
+                      label: 'Delete',
+                      destructive: true,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                children: [
+                  ...fee.rates.map(
+                    (bracket) => Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(bracket.label, style: AppText.caption),
+                          Text(
+                            formatEtb(bracket.rate),
+                            style: AppText.bodyMedium
+                                .copyWith(color: AppColors.primary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChildBalanceCard extends StatelessWidget {
+  final Child child;
+  final bool overdueOnly;
+  final ValueChanged<PaymentRecord> onEditPayment;
+
+  const _ChildBalanceCard({
+    super.key,
+    required this.child,
+    required this.overdueOnly,
+    required this.onEditPayment,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final visiblePayments = overdueOnly
+        ? child.payments.where((p) => p.isOverdue).toList()
+        : child.payments;
+    final overdueTotal = child.payments
+        .where((p) => p.isOverdue)
+        .fold<double>(0, (sum, p) => sum + p.amount);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ChildAvatar(child: child, radius: 18),
+              const SizedBox(width: 12),
+              Expanded(child: Text(child.fullName, style: AppText.bodyMedium)),
+              if (overdueTotal > 0) ...[
+                const _OverdueChip(),
+                const SizedBox(width: 8),
+                Text(
+                  formatEtb(overdueTotal),
+                  style:
+                      AppText.bodyMedium.copyWith(color: AppColors.danger),
+                ),
+              ] else
+                Text('No overdue', style: AppText.caption),
+            ],
+          ),
+          for (final payment in visiblePayments)
+            InkWell(
+              key: ValueKey('payment-${payment.id}'),
+              onTap: () => onEditPayment(payment),
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(payment.description,
+                            style: AppText.caption),
+                      ),
+                      if (payment.isOverdue) ...[
+                        const Tooltip(
+                          message: 'Overdue',
+                          child: Icon(
+                            Icons.error_outline,
+                            size: 16,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        formatEtb(payment.amount),
+                        style: AppText.caption.copyWith(
+                          color: payment.isOverdue
+                              ? AppColors.danger
+                              : AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: AppColors.mutedForeground,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
