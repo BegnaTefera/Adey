@@ -28,8 +28,9 @@ class ChildProfileScreen extends StatefulWidget {
   State<ChildProfileScreen> createState() => _ChildProfileScreenState();
 }
 
-class _ChildProfileScreenState extends State<ChildProfileScreen> {
-  _Tab _activeTab = _Tab.info;
+class _ChildProfileScreenState extends State<ChildProfileScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   late Child _child = widget.child;
   bool _isUpdatingEnrollmentStatus = false;
 
@@ -44,13 +45,22 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: _tabs.length, vsync: this);
     ChildrenStore.instance.addListener(_onStoreChanged);
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     ChildrenStore.instance.removeListener(_onStoreChanged);
     super.dispose();
+  }
+
+  Widget _tabScrollable(Widget child) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: child,
+    );
   }
 
   void _onStoreChanged() {
@@ -537,40 +547,17 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 18),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _tabs.map((t) {
-                        final selected = _activeTab == t.$1;
-                        return GestureDetector(
-                          onTap: () => setState(() => _activeTab = t.$1),
-                          child: Container(
-                            constraints: const BoxConstraints(minHeight: 48),
-                            alignment: Alignment.bottomCenter,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  width: 2,
-                                  color: selected
-                                      ? AppColors.foreground
-                                      : Colors.transparent,
-                                ),
-                              ),
-                            ),
-                            child: Text(
-                              t.$2,
-                              style: AppText.bodyMedium.copyWith(
-                                color: selected
-                                    ? AppColors.foreground
-                                    : AppColors.mutedForeground,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    labelColor: AppColors.foreground,
+                    unselectedLabelColor: AppColors.mutedForeground,
+                    indicatorColor: AppColors.foreground,
+                    indicatorWeight: 2,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    labelStyle: AppText.bodyMedium,
+                    tabs: [for (final t in _tabs) Tab(text: t.$2)],
                   ),
                 ],
               ),
@@ -578,29 +565,37 @@ class _ChildProfileScreenState extends State<ChildProfileScreen> {
 
             // Tab content
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: switch (_activeTab) {
-                  _Tab.info => _InfoTab(child: child, onEdit: _editChildInfo),
-                  _Tab.guardians => _GuardiansTab(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _tabScrollable(
+                    _InfoTab(child: child, onEdit: _editChildInfo),
+                  ),
+                  _tabScrollable(
+                    _GuardiansTab(
                       child: child,
                       onAddPickup: _addPickupPerson,
                       onRemovePickup: _removePickupPerson,
                       onAddGuardian: _addGuardian,
                       onEditGuardian: _editGuardian,
                     ),
-                  _Tab.documents => _DocumentsTab(
+                  ),
+                  _tabScrollable(
+                    _DocumentsTab(
                       child: child,
                       onAdd: _addDocument,
                       onEdit: _editDocument,
                       onEditImmunization: _editImmunizationPages,
                     ),
-                  _Tab.attendance => _AttendanceTab(child: child),
-                  _Tab.payments => _PaymentsTab(
+                  ),
+                  _tabScrollable(_AttendanceTab(child: child)),
+                  _tabScrollable(
+                    _PaymentsTab(
                       child: child,
                       onAdd: _addPayment,
                     ),
-                },
+                  ),
+                ],
               ),
             ),
           ],

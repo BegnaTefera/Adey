@@ -105,41 +105,46 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         elevation: 0,
         title: Text('Attendance', style: AppText.sectionTitle),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _activeTab == 0
-                ? _daySummaryStrip(enrolled)
-                : _rangeSummaryStrip(enrolled),
-          ),
-          const SizedBox(height: 16),
-          TabBar(
-            controller: _tabs,
-            labelColor: AppColors.foreground,
-            unselectedLabelColor: AppColors.mutedForeground,
-            indicatorColor: AppColors.primary,
-            labelStyle: const TextStyle(
-              fontFamily: 'DMSans',
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: _activeTab == 0
+                    ? _daySummaryStrip(enrolled)
+                    : _rangeSummaryStrip(enrolled),
+              ),
             ),
-            tabs: const [
-              Tab(text: 'Register'),
-              Tab(text: 'History'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: [
-                _registerTab(enrolled),
-                _historyTab(enrolled),
-              ],
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: TabBar(
+                  controller: _tabs,
+                  labelColor: AppColors.foreground,
+                  unselectedLabelColor: AppColors.mutedForeground,
+                  indicatorColor: AppColors.primary,
+                  labelStyle: const TextStyle(
+                    fontFamily: 'DMSans',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                  tabs: const [
+                    Tab(text: 'Register'),
+                    Tab(text: 'History'),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ],
+          ];
+        },
+        body: TabBarView(
+          controller: _tabs,
+          children: [
+            _registerTab(enrolled),
+            _historyTab(enrolled),
+          ],
+        ),
       ),
     );
   }
@@ -302,6 +307,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         _statusFilter != null;
 
     return ListView(
+      key: const PageStorageKey('attendance-register'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
         _daySelector(),
@@ -529,6 +535,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           });
 
     return ListView(
+      key: const PageStorageKey('attendance-history'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
         Container(

@@ -17,18 +17,22 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
+class _ReportsScreenState extends State<ReportsScreen>
+    with SingleTickerProviderStateMixin {
   ReportPeriod _period = ReportPeriod.thisMonth;
+  late final TabController _tabs;
 
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 2, vsync: this);
     ChildrenStore.instance.addListener(_onStoreChanged);
     ExpensesStore.instance.addListener(_onStoreChanged);
   }
 
   @override
   void dispose() {
+    _tabs.dispose();
     ChildrenStore.instance.removeListener(_onStoreChanged);
     ExpensesStore.instance.removeListener(_onStoreChanged);
     super.dispose();
@@ -51,73 +55,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final expenseCount = report.expensesByMonth
         .fold<int>(0, (sum, group) => sum + group.rows.length);
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          title: Text('Reports', style: AppText.sectionTitle),
-        ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SummaryCard(report: report),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final period in ReportPeriod.values)
-                        ChoiceChip(
-                          label: Text(period.label),
-                          selected: _period == period,
-                          showCheckmark: false,
-                          selectedColor: AppColors.primary,
-                          labelStyle: AppText.bodyMedium.copyWith(
-                            color: _period == period
-                                ? Colors.white
-                                : AppColors.foreground,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+        elevation: 0,
+        title: Text('Reports', style: AppText.sectionTitle),
+      ),
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SummaryCard(report: report),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final period in ReportPeriod.values)
+                          ChoiceChip(
+                            label: Text(period.label),
+                            selected: _period == period,
+                            showCheckmark: false,
+                            selectedColor: AppColors.primary,
+                            labelStyle: AppText.bodyMedium.copyWith(
+                              color: _period == period
+                                  ? Colors.white
+                                  : AppColors.foreground,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            onSelected: (_) =>
+                                setState(() => _period = period),
                           ),
-                          onSelected: (_) =>
-                              setState(() => _period = period),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: TabBar(
+                controller: _tabs,
+                labelColor: AppColors.foreground,
+                unselectedLabelColor: AppColors.mutedForeground,
+                indicatorColor: AppColors.primary,
+                labelStyle: const TextStyle(
+                  fontFamily: 'DMSans',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+                tabs: [
+                  Tab(text: 'Billing ($billingCount)'),
+                  Tab(text: 'Expenses ($expenseCount)'),
                 ],
               ),
             ),
-            TabBar(
-              labelColor: AppColors.foreground,
-              unselectedLabelColor: AppColors.mutedForeground,
-              indicatorColor: AppColors.primary,
-              labelStyle: const TextStyle(
-                fontFamily: 'DMSans',
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-              tabs: [
-                Tab(text: 'Billing ($billingCount)'),
-                Tab(text: 'Expenses ($expenseCount)'),
-              ],
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _BillingTab(report: report),
-                  _ExpensesTab(report: report),
-                ],
-              ),
-            ),
+          ];
+        },
+        body: TabBarView(
+          controller: _tabs,
+          children: [
+            _BillingTab(report: report),
+            _ExpensesTab(report: report),
           ],
         ),
       ),
@@ -254,6 +260,7 @@ class _BillingTab extends StatelessWidget {
       );
     }
     return ListView(
+      key: const PageStorageKey('reports-billing'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         for (final group in report.billingByMonth) ...[
@@ -348,6 +355,7 @@ class _ExpensesTab extends StatelessWidget {
       );
     }
     return ListView(
+      key: const PageStorageKey('reports-expenses'),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         for (final group in report.expensesByMonth) ...[

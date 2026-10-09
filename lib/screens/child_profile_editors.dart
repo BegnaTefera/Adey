@@ -666,6 +666,15 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
     );
   }
 
+  String _statusLabel(PaymentStatus status) => switch (status) {
+        PaymentStatus.paid => 'Paid',
+        PaymentStatus.pending => 'Pending',
+        PaymentStatus.cancelled => 'Cancelled',
+      };
+
+  String get _dueDateLabel =>
+      '${_dueDate.year}-${_dueDate.month.toString().padLeft(2, '0')}-${_dueDate.day.toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     return _SheetScaffold(
@@ -676,48 +685,63 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
           ? null
           : () => Navigator.of(context).pop(const PaymentEditResult.delete()),
       deleteLabel: 'Delete payment',
-      children: [
-        TextField(
-          controller: _feeName,
-          decoration: const InputDecoration(labelText: 'Fee name'),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _description,
-          decoration: const InputDecoration(
-            labelText: 'Description',
-            hintText: 'Bank reference or receipt note',
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _amount,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Amount (ETB)'),
-        ),
-        const SizedBox(height: 12),
-        _ChoiceRow<PaymentStatus>(
-          label: 'Status',
-          value: _status,
-          items: const [
-            (PaymentStatus.paid, 'Paid'),
-            (PaymentStatus.pending, 'Pending'),
-            (PaymentStatus.cancelled, 'Cancelled'),
-          ],
-          onChanged: (s) => setState(() => _status = s),
-        ),
-        const SizedBox(height: 12),
-        InkWell(
-          onTap: _pickDueDate,
-          child: InputDecorator(
-            decoration: const InputDecoration(labelText: 'Due date'),
-            child: Text(
-              '${_dueDate.year}-${_dueDate.month.toString().padLeft(2, '0')}-${_dueDate.day.toString().padLeft(2, '0')}',
-              style: AppText.bodyRegular,
-            ),
-          ),
-        ),
-      ],
+      children: _isNew
+          ? [
+              TextField(
+                controller: _feeName,
+                decoration: const InputDecoration(labelText: 'Fee name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _description,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Bank reference or receipt note',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _amount,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Amount (ETB)'),
+              ),
+              const SizedBox(height: 12),
+              _ChoiceRow<PaymentStatus>(
+                label: 'Status',
+                value: _status,
+                items: const [
+                  (PaymentStatus.paid, 'Paid'),
+                  (PaymentStatus.pending, 'Pending'),
+                  (PaymentStatus.cancelled, 'Cancelled'),
+                ],
+                onChanged: (s) => setState(() => _status = s),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _pickDueDate,
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Due date'),
+                  child: Text(_dueDateLabel, style: AppText.bodyRegular),
+                ),
+              ),
+            ]
+          : [
+              _ReadonlyField(label: 'Fee name', value: _feeName.text),
+              const SizedBox(height: 12),
+              _ReadonlyField(label: 'Description', value: _description.text),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _amount,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Amount (ETB)'),
+              ),
+              const SizedBox(height: 12),
+              _ReadonlyField(label: 'Status', value: _statusLabel(_status)),
+              const SizedBox(height: 12),
+              _ReadonlyField(label: 'Due date', value: _dueDateLabel),
+            ],
     );
   }
 }
@@ -828,6 +852,24 @@ class _ChoiceRow<T> extends StatelessWidget {
       onChanged: (v) {
         if (v != null) onChanged(v);
       },
+    );
+  }
+}
+
+class _ReadonlyField extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _ReadonlyField({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(labelText: label, enabled: false),
+      child: Text(
+        value.trim().isEmpty ? '—' : value,
+        style: AppText.bodyRegular.copyWith(color: AppColors.mutedForeground),
+      ),
     );
   }
 }
