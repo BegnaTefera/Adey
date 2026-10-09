@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+import '../data/attendance_schedule.dart';
 import '../data/children_store.dart';
 import '../data/date_range.dart';
 import '../data/formatters.dart';
@@ -10,6 +11,7 @@ import '../data/settings_store.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/app_filter_chip.dart';
 import '../widgets/child_avatar.dart';
 import '../widgets/empty_illustration.dart';
 import '../widgets/metric_card.dart';
@@ -33,7 +35,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   late final TabController _tabs;
   int _activeTab = 0;
 
-  DateTime _day = DateTime.now();
+  DateTime _day = AttendanceSchedule.operatingDay();
   DateRangePreset _rangePreset = DateRangePreset.thisMonth;
   DateTime? _customStart;
   DateTime? _customEnd;
@@ -304,30 +306,39 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       children: [
         _daySelector(),
         const SizedBox(height: 16),
-        _registerFilters(groups, enrolled.length, present, absent, unmarked),
-        const SizedBox(height: 20),
-        if (filtered.isEmpty)
-          EmptyIllustration(
-            icon: Icons.search_off_outlined,
-            title: 'No children match',
-            message: 'Try a different name, age group, or status.',
-            actionLabel: 'Clear filters',
-            onAction: filtersActive ? _clearRegisterFilters : null,
-            actionIcon: Icons.filter_alt_off_outlined,
+        if (AttendanceSchedule.isDayOff(_day))
+          const EmptyIllustration(
+            icon: Icons.weekend_outlined,
+            title: 'Sunday — day off',
+            message: 'The daycare is closed on Sundays, so there is no '
+                'register. Pick another day to take attendance.',
           )
         else ...[
-          _registerHeader(filtered),
-          const SizedBox(height: 12),
-          for (final child in filtered)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _AttendanceRow(
-                child: child,
-                record: _recordFor(child, _day),
-                saving: _saving.contains(child.id),
-                onChanged: (status) => _setStatus(child, status),
+          _registerFilters(groups, enrolled.length, present, absent, unmarked),
+          const SizedBox(height: 20),
+          if (filtered.isEmpty)
+            EmptyIllustration(
+              icon: Icons.search_off_outlined,
+              title: 'No children match',
+              message: 'Try a different name, age group, or status.',
+              actionLabel: 'Clear filters',
+              onAction: filtersActive ? _clearRegisterFilters : null,
+              actionIcon: Icons.filter_alt_off_outlined,
+            )
+          else ...[
+            _registerHeader(filtered),
+            const SizedBox(height: 12),
+            for (final child in filtered)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _AttendanceRow(
+                  child: child,
+                  record: _recordFor(child, _day),
+                  saving: _saving.contains(child.id),
+                  onChanged: (status) => _setStatus(child, status),
+                ),
               ),
-            ),
+          ],
         ],
       ],
     );
@@ -354,9 +365,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               ],
             ),
           ),
-          if (!_isToday(_day))
+          if (!AttendanceSchedule.isCurrentOperatingDay(_day))
             TextButton(
-              onPressed: () => setState(() => _day = DateTime.now()),
+              onPressed: () =>
+                  setState(() => _day = AttendanceSchedule.operatingDay()),
               child: const Text('Today'),
             ),
           OutlinedButton.icon(
@@ -469,17 +481,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     required String label,
     required VoidCallback onTap,
   }) {
-    return ChoiceChip(
-      label: Text(label),
+    return AppFilterChip(
+      label: label,
       selected: selected,
-      showCheckmark: false,
-      selectedColor: AppColors.foreground,
-      labelStyle: AppText.bodyMedium.copyWith(
-        color: selected ? Colors.white : AppColors.foreground,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-      ),
-      onSelected: (_) => onTap(),
+      onSelected: onTap,
     );
   }
 
@@ -731,7 +736,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         date: day,
         checkIn: status == AttendanceStatus.present
             ? (existing?.checkIn ??
-                (_isToday(day)
+                (AttendanceSchedule.isCurrentOperatingDay(day)
                     ? DateFormat('HH:mm').format(DateTime.now())
                     : null))
             : null,
@@ -753,6 +758,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   Future<void> _setStatus(Child child, AttendanceStatus? status) async {
     if (_saving.contains(child.id)) return;
+    if (AttendanceSchedule.isDayOff(_day)) return;
     FocusScope.of(context).unfocus();
     setState(() => _saving.add(child.id));
     try {
@@ -780,6 +786,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   }
 
   Future<void> _markAllPresent(List<Child> children) async {
+    if (AttendanceSchedule.isDayOff(_day)) return;
     final targets = children
         .where((c) => _recordFor(c, _day)?.status != AttendanceStatus.present)
         .toList();
@@ -819,8 +826,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
 bool _sameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
-
-bool _isToday(DateTime date) => _sameDay(date, DateTime.now());
 
 String _ageGroupOf(Child child) {
   final months = child.ageInMonths;
@@ -972,7 +977,7 @@ class _StatusPill extends StatelessWidget {
     final (bg, fg, icon, label) = switch (status) {
       AttendanceStatus.present => (
           AppColors.syncSoft,
-          AppColors.sync,
+          AppColors.primary,
           Icons.check_circle_outline,
           'Present',
         ),
@@ -1128,11 +1133,11 @@ class _AttendanceTable extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.check, size: 13, color: AppColors.sync),
+                const Icon(Icons.check, size: 13, color: AppColors.primary),
                 const SizedBox(width: 4),
                 Text(
                   '${row.present}',
-                  style: AppText.bodyRegular.copyWith(color: AppColors.sync),
+                  style: AppText.bodyRegular.copyWith(color: AppColors.primary),
                 ),
               ],
             ),

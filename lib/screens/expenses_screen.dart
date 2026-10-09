@@ -11,6 +11,7 @@ import '../data/settings_store.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/app_filter_chip.dart';
 import '../widgets/empty_illustration.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/range_filter.dart';
@@ -211,12 +212,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _categoryChip(null, 'All', allCount),
+                AppFilterChip(
+                  label: 'All',
+                  count: allCount,
+                  selected: _category == null,
+                  onSelected: () => setState(() => _category = null),
+                ),
                 for (final category in categories)
-                  _categoryChip(
-                    category,
-                    category,
-                    categoryCounts[category] ?? 0,
+                  AppFilterChip(
+                    label: category,
+                    count: categoryCounts[category] ?? 0,
+                    selected: _category == category,
+                    onSelected: () => setState(() => _category = category),
                   ),
               ],
             ),
@@ -234,22 +241,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ],
         ],
       ),
-    );
-  }
-
-  Widget _categoryChip(String? value, String label, int count) {
-    final selected = _category == value;
-    return ChoiceChip(
-      label: Text(count > 0 ? '$label ($count)' : label),
-      selected: selected,
-      showCheckmark: false,
-      selectedColor: AppColors.foreground,
-      labelStyle: AppText.bodyMedium.copyWith(
-        color: selected ? Colors.white : AppColors.foreground,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-      ),
-      onSelected: (_) => setState(() => _category = value),
     );
   }
 
@@ -420,11 +411,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ..sort();
     var date = existing?.date ?? DateTime.now();
     var isSaving = false;
-    String? errorMessage;
+    String? categoryError;
+    String? amountError;
 
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
@@ -476,7 +470,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 TextField(
                   controller: categoryController,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Category'),
+                  autofocus: existing == null,
+                  onChanged: (_) {
+                    if (categoryError != null) {
+                      setSheetState(() => categoryError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Category',
+                    errorText: categoryError,
+                  ),
                 ),
                 if (suggestions.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -501,20 +504,21 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   controller: amountController,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Amount (ETB)'),
+                  onChanged: (_) {
+                    if (amountError != null) {
+                      setSheetState(() => amountError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Amount (ETB)',
+                    errorText: amountError,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: noteController,
                   decoration: const InputDecoration(labelText: 'Note'),
                 ),
-                if (errorMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    errorMessage!,
-                    style: AppText.caption.copyWith(color: AppColors.danger),
-                  ),
-                ],
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
@@ -528,14 +532,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                             if (categoryController.text.trim().isEmpty ||
                                 amount <= 0) {
                               setSheetState(() {
-                                errorMessage =
-                                    'Enter a category and an amount greater than zero.';
+                                categoryError =
+                                    categoryController.text.trim().isEmpty
+                                        ? 'Enter a category.'
+                                        : null;
+                                amountError = amount <= 0
+                                    ? 'Enter an amount greater than zero.'
+                                    : null;
                               });
                               return;
                             }
                             setSheetState(() {
                               isSaving = true;
-                              errorMessage = null;
+                              categoryError = null;
+                              amountError = null;
                             });
                             try {
                               final expense = ExpenseItem(
@@ -728,12 +738,16 @@ class _ExpenseTable extends StatelessWidget {
   }
 
   Widget _row(ExpenseItem item, bool showDate, bool showNote) {
+    final label = item.note.isEmpty
+        ? 'Edit ${item.category}, ${formatEtb(item.amount)}'
+        : 'Edit ${item.category}, ${formatEtb(item.amount)}, ${item.note}';
     return Semantics(
       button: true,
-      label: 'Edit ${item.category} expense',
+      label: label,
       child: InkWell(
         onTap: () => onTap(item),
         child: Container(
+          key: ValueKey(item.id),
           constraints: const BoxConstraints(minHeight: 48),
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
           decoration: const BoxDecoration(
@@ -773,6 +787,12 @@ class _ExpenseTable extends StatelessWidget {
                   style: AppText.bodyMedium.copyWith(fontWeight: FontWeight.w600),
                   textAlign: TextAlign.right,
                 ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.mutedForeground,
               ),
             ],
           ),

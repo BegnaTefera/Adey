@@ -1323,128 +1323,134 @@ class _EthiopianDatePickerDialogState
     final gridCount = (firstWeekday - 1) + _daysInMonth;
 
     return Dialog(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Date of birth', style: AppText.sectionTitle),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Close calendar',
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                IconButton(
-                  onPressed: _compareMonth(_year, _month, _firstEthiopian.year,
-                              _firstEthiopian.month) >
-                          0
-                      ? () => _changeMonth(-1)
-                      : null,
-                  icon: const Icon(Icons.chevron_left),
-                  tooltip: 'Previous month',
-                ),
-                Expanded(
-                  child: Text(
-                    '${amharicMonths[_month - 1]} $_year',
-                    textAlign: TextAlign.center,
-                    style: AppText.bodyMedium,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Date of birth', style: AppText.sectionTitle),
                   ),
-                ),
-                IconButton(
-                  onPressed: _compareMonth(_year, _month, _lastEthiopian.year,
-                              _lastEthiopian.month) <
-                          0
-                      ? () => _changeMonth(1)
-                      : null,
-                  icon: const Icon(Icons.chevron_right),
-                  tooltip: 'Next month',
-                ),
-              ],
-            ),
-            DropdownButton<int>(
-              value: _year,
-              underline: const SizedBox.shrink(),
-              items: _availableYears
-                  .map(
-                    (year) => DropdownMenuItem<int>(
-                      value: year,
-                      child: Text('$year', style: AppText.bodyMedium),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (year) {
-                if (year == null) return;
-                final clamped = _clampMonth(year, _month);
-                setState(() {
-                  _year = clamped.$1;
-                  _month = clamped.$2;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-                  .map(
-                    (day) => Expanded(
-                      child: Center(child: Text(day)),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 8),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: gridCount,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisSpacing: 6,
-                crossAxisSpacing: 6,
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close calendar',
+                  ),
+                ],
               ),
-              itemBuilder: (context, index) {
-                final day = index - firstWeekday + 2;
-                if (day < 1 || day > _daysInMonth) return const SizedBox();
-                final selectable = _isSelectable(day);
-                final selected = _isSelected(day);
-                return InkWell(
-                  onTap: selectable
-                      ? () => Navigator.of(context).pop(
-                            ETDateTime(_year, _month, day)
-                                .convertToGregorian(),
-                          )
-                      : null,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: selected ? AppColors.primary : null,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: _compareMonth(_year, _month,
+                                _firstEthiopian.year, _firstEthiopian.month) >
+                            0
+                        ? () => _changeMonth(-1)
+                        : null,
+                    icon: const Icon(Icons.chevron_left),
+                    tooltip: 'Previous month',
+                  ),
+                  Expanded(
                     child: Text(
-                      '$day',
-                      style: AppText.bodyRegular.copyWith(
-                        color: !selectable
-                            ? AppColors.mutedForeground.withValues(alpha: 0.4)
-                            : selected
-                                ? Colors.white
-                                : AppColors.foreground,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.normal,
+                      '${amharicMonths[_month - 1]} $_year',
+                      textAlign: TextAlign.center,
+                      style: AppText.bodyMedium,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _compareMonth(_year, _month,
+                                _lastEthiopian.year, _lastEthiopian.month) <
+                            0
+                        ? () => _changeMonth(1)
+                        : null,
+                    icon: const Icon(Icons.chevron_right),
+                    tooltip: 'Next month',
+                  ),
+                ],
+              ),
+              DropdownButton<int>(
+                value: _year,
+                underline: const SizedBox.shrink(),
+                items: _availableYears
+                    .map(
+                      (year) => DropdownMenuItem<int>(
+                        value: year,
+                        child: Text('$year', style: AppText.bodyMedium),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (year) {
+                  if (year == null) return;
+                  final clamped = _clampMonth(year, _month);
+                  setState(() {
+                    _year = clamped.$1;
+                    _month = clamped.$2;
+                  });
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children:
+                    const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                        .map(
+                          (day) => Expanded(
+                            child: Center(child: Text(day)),
+                          ),
+                        )
+                        .toList(),
+              ),
+              const SizedBox(height: 8),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: gridCount,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                ),
+                itemBuilder: (context, index) {
+                  final day = index - firstWeekday + 2;
+                  if (day < 1 || day > _daysInMonth) return const SizedBox();
+                  final selectable = _isSelectable(day);
+                  final selected = _isSelected(day);
+                  return InkWell(
+                    onTap: selectable
+                        ? () => Navigator.of(context).pop(
+                              ETDateTime(_year, _month, day)
+                                  .convertToGregorian(),
+                            )
+                        : null,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selected ? AppColors.primary : null,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$day',
+                        style: AppText.bodyRegular.copyWith(
+                          color: !selectable
+                              ? AppColors.mutedForeground
+                                  .withValues(alpha: 0.4)
+                              : selected
+                                  ? Colors.white
+                                  : AppColors.foreground,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.normal,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

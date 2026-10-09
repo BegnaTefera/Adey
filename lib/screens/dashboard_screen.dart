@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/attendance_schedule.dart';
 import '../data/children_store.dart';
 import '../data/formatters.dart';
 import '../models/child.dart';
@@ -42,12 +43,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return result;
   }
 
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
-  }
+  bool _isToday(DateTime date) =>
+      AttendanceSchedule.isCurrentOperatingDay(date);
 
   String get _greeting {
     final hour = DateTime.now().hour;

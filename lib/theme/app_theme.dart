@@ -10,7 +10,7 @@ class AppColors {
   static const card = Color(0xFFFFFFFF);
   static const cardForeground = Color(0xFF1A1916);
   static const muted = Color(0xFFF0EDE8);
-  static const mutedForeground = Color(0xFF7A7570);
+  static const mutedForeground = Color(0xFF6E6963);
   static const border = Color(0xFFE4E0DA);
   static const primary = Color(0xFF2D5A3D);
   static const primaryForeground = Color(0xFFFFFFFF);
@@ -26,7 +26,7 @@ class AppColors {
   static const pendingBorder = Color(0xFFF0D070);
   static const pendingBadge = Color(0xFFFDE98A);
   static const syncSoft = Color(0xFFEDF7F1);
-  static const pendingTextDark = Color(0xFFB07D00);
+  static const pendingTextDark = Color(0xFF8A6100);
 }
 
 /// Text styles — `DM Sans` for body/UI text, `DM Mono` for the small

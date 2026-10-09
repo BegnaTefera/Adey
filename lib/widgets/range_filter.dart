@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../data/date_range.dart';
 import '../theme/app_theme.dart';
+import 'app_filter_chip.dart';
 import 'date_field.dart';
 
 /// Preset date-range chips plus the two custom date fields, shared by the
@@ -36,17 +38,10 @@ class RangeFilter extends StatelessWidget {
           runSpacing: 8,
           children: [
             for (final option in DateRangePreset.values)
-              ChoiceChip(
-                label: Text(option.label),
+              AppFilterChip(
+                label: option.label,
                 selected: preset == option,
-                showCheckmark: false,
-                selectedColor: AppColors.primary,
-                labelStyle: AppText.bodyMedium.copyWith(
-                  color: preset == option ? Colors.white : AppColors.foreground,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                onSelected: (_) => onChanged(option),
+                onSelected: () => onChanged(option),
               ),
           ],
         ),

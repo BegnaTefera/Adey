@@ -11,7 +11,6 @@ class MetricCard extends StatelessWidget {
   final IconData icon;
   final Color? valueColor;
   final Color? accent;
-  final double width;
 
   const MetricCard({
     super.key,
@@ -21,14 +20,13 @@ class MetricCard extends StatelessWidget {
     this.subtitle,
     this.valueColor,
     this.accent,
-    this.width = 178,
   });
 
   @override
   Widget build(BuildContext context) {
     final tint = accent ?? AppColors.primary;
     return Container(
-      width: width,
+      width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.muted,
@@ -81,8 +79,12 @@ class MetricCard extends StatelessWidget {
   }
 }
 
-/// Wraps a set of [MetricCard]s so they reflow cleanly from one column on a
-/// narrow phone to a full row on the desktop shell.
+/// Lays out a set of [MetricCard]s that adapt to the available width.
+///
+/// On the desktop shell the cards keep their compact 178px width in a single
+/// row; on narrower windows they fall back to a 3-, 2- or 1-column grid whose
+/// cells grow to share the full width, so a phone shows a tidy 2x2 block
+/// instead of one tall stacked column.
 class MetricStrip extends StatelessWidget {
   final List<Widget> children;
 
@@ -90,6 +92,31 @@ class MetricStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(spacing: 12, runSpacing: 12, children: children);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 12.0;
+        const maxCardWidth = 178.0;
+        const minCardWidth = 128.0;
+        final available = constraints.maxWidth;
+
+        final count = children.isEmpty ? 1 : children.length;
+        final fits = ((available + spacing) / (minCardWidth + spacing)).floor();
+        var columns = fits < 1 ? 1 : fits;
+        if (columns > count) columns = count;
+        if (columns > 4) columns = 4;
+
+        final rawWidth = (available - spacing * (columns - 1)) / columns;
+        final cardWidth = rawWidth > maxCardWidth ? maxCardWidth : rawWidth;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final child in children)
+              SizedBox(width: cardWidth, child: child),
+          ],
+        );
+      },
+    );
   }
 }
