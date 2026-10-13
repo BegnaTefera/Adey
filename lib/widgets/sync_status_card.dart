@@ -7,9 +7,9 @@ import '../screens/settings_screen.dart';
 import '../theme/app_theme.dart';
 import 'app_feedback.dart';
 
-/// The sync card on the dashboard — a live indicator, nothing more.
+/// The sync card on the dashboard a live indicator, nothing more.
 ///
-/// Mobile (a client): a colored dot — green if synced, red if not — plus a
+/// Mobile (a client): a colored dot green if synced, red if not plus a
 /// "Sync now" button. The detail (last synced time, auto-sync note, the
 /// last error) lives in Settings so the dashboard doesn't flicker every
 /// time an automatic background sync completes.

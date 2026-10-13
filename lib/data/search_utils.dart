@@ -1,9 +1,9 @@
 /// Shared text search helpers for fuzzy, typo-tolerant matching across
-/// child and guardian names — used by the Children list search and the
+/// child and guardian names used by the Children list search and the
 /// guardian-search-for-payments feature on Billing.
 ///
 /// Normalization strips punctuation but keeps any Unicode *letter*, not
-/// just a-z — this matters because a plain `[^a-z0-9\s]` regex would
+/// just a-z this matters because a plain `[^a-z0-9\s]` regex would
 /// silently strip every Amharic (Ge'ez script) character, breaking
 /// search for any name entered in Amharic. `\p{L}` (with `unicode:
 /// true`) matches a letter in any script.

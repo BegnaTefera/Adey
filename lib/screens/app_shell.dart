@@ -8,8 +8,9 @@ import 'dashboard_screen.dart';
 import 'children_screen.dart';
 import 'register_screen.dart';
 import 'billing_screen.dart';
+import 'attendance_screen.dart';
 
-enum _Screen { dashboard, children, billing }
+enum _Screen { dashboard, attendance, children, billing }
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -81,6 +82,7 @@ Future<void> _syncOnAppOpen() async {
             Expanded(
               child: switch (_screen) {
                 _Screen.dashboard => const DashboardScreen(),
+                _Screen.attendance => const AttendanceScreen(),
                 _Screen.children => const ChildrenScreen(),
                 _Screen.billing => BillingScreen(
                     key: ValueKey(_registeredChildId),
@@ -116,6 +118,12 @@ Future<void> _syncOnAppOpen() async {
                   label: 'Dashboard',
                   active: _screen == _Screen.dashboard,
                   onTap: () => _selectScreen(_Screen.dashboard),
+                ),
+                _NavButton(
+                  icon: Icons.event_available_outlined,
+                  label: 'Attendance',
+                  active: _screen == _Screen.attendance,
+                  onTap: () => _selectScreen(_Screen.attendance),
                 ),
                 Expanded(
                   child: Material(
@@ -162,16 +170,16 @@ Future<void> _syncOnAppOpen() async {
                   ),
                 ),
                 _NavButton(
-                  icon: Icons.people_outline,
-                  label: 'Children',
-                  active: _screen == _Screen.children,
-                  onTap: () => _selectScreen(_Screen.children),
-                ),
-                _NavButton(
                   icon: Icons.receipt_long_outlined,
                   label: 'Billing',
                   active: _screen == _Screen.billing,
                   onTap: () => _selectScreen(_Screen.billing),
+                ),
+                _NavButton(
+                  icon: Icons.people_outline,
+                  label: 'Children',
+                  active: _screen == _Screen.children,
+                  onTap: () => _selectScreen(_Screen.children),
                 ),
               ],
             ),
@@ -219,6 +227,8 @@ class _NavButton extends StatelessWidget {
               ),
               const SizedBox(height: 5),
               Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppText.caption.copyWith(
                     fontSize: 12,
                     color: color,

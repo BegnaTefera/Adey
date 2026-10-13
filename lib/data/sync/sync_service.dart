@@ -30,7 +30,7 @@ class SyncService extends ChangeNotifier {
   SyncService._internal();
   static final SyncService instance = SyncService._internal();
 
-  /// Parents before children — inserts happen in this order so foreign
+  /// Parents before children inserts happen in this order so foreign
   /// keys are satisfied.
   static const syncTables = [
     'children',
@@ -370,7 +370,7 @@ class SyncService extends ChangeNotifier {
   }
 
   /// Applies the person's choice. There is no auto-resolution and no
-  /// timeout — this is only ever called from the compare screen.
+  /// timeout this is only ever called from the compare screen.
   ///
   /// Either way the surviving row is restamped with the current time, so
   /// on the next sync it counts as the newest version and the other side
@@ -384,7 +384,7 @@ class SyncService extends ChangeNotifier {
 
     await db.transaction((txn) async {
       if (keepLocal) {
-        // Use the live row, not the snapshot — it may have been edited
+        // Use the live row, not the snapshot it may have been edited
         // since the conflict was recorded.
         await txn.update(
           conflict.tableName,

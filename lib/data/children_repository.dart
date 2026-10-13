@@ -4,7 +4,7 @@ import '../models/child.dart';
 
 /// All SQLite access for [Child] and its nested entities lives here.
 /// [ChildrenStore] calls into this and keeps an in-memory cache for
-/// the UI to listen to — this class doesn't know about that cache, it
+/// the UI to listen to this class doesn't know about that cache, it
 /// just talks to the database.
 class ChildrenRepository {
   ChildrenRepository._internal();
@@ -81,7 +81,7 @@ class ChildrenRepository {
   }
 
   /// Inserts a brand-new child and all of its nested rows in one
-  /// transaction — either everything is saved, or (on error) nothing
+  /// transaction either everything is saved, or (on error) nothing
   /// is, so a failed registration can't leave a half-written child.
   Future<void> insert(Child child) async {
     final db = await AppDatabase.instance.database;

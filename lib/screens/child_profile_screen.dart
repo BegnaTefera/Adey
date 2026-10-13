@@ -647,51 +647,120 @@ class _InfoTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        Container(
-          decoration: cardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text('ALLERGIES', style: AppText.monoLabel),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                child: child.allergies.isEmpty
-                    ? Text('No known allergies', style: AppText.caption)
-                    : Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: child.allergies
-                            .map((a) => Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.dangerSoft,
-                                    borderRadius: BorderRadius.circular(99),
-                                  ),
-                                  child: Text(
-                                    a,
-                                    style: AppText.caption.copyWith(
-                                        color: AppColors.danger,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 12),
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-              ),
-            ],
-          ),
+        _responsiveCards(
+          context,
+          [
+            _allergiesCard(),
+            _notesCard('HEALTH CONDITION', child.healthCondition),
+            _notesCard('DIETARY CONDITION', child.dietaryNotes),
+            _notesCard('SPECIAL CHARACTERISTICS', child.specialCharacteristics),
+          ],
         ),
-        const SizedBox(height: 20),
-        _notesCard('HEALTH CONDITION', child.healthCondition),
-        const SizedBox(height: 20),
-        _notesCard('DIETARY CONDITION', child.dietaryNotes),
-        const SizedBox(height: 20),
-        _notesCard('SPECIAL CHARACTERISTICS', child.specialCharacteristics),
       ],
+    );
+  }
+
+  Widget _allergiesCard() {
+    return Container(
+      decoration: cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text('ALLERGIES', style: AppText.monoLabel),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: child.allergies.isEmpty
+                ? Text('No known allergies', style: AppText.caption)
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: child.allergies
+                        .map((a) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppColors.dangerSoft,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Text(
+                                a,
+                                style: AppText.caption.copyWith(
+                                    color: AppColors.danger,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12),
+                              ),
+                            ))
+                        .toList(),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Lays the info cards out in a responsive grid: stacked on narrow
+  /// screens, then 2 or 4 columns as the available width grows.
+  Widget _responsiveCards(BuildContext context, List<Widget> cards) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = width >= 1000
+            ? 4
+            : width >= 680
+                ? 2
+                : 1;
+        const gap = 20.0;
+        const rowsGap = 20.0;
+
+        if (columns == 1) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: rowsGap),
+                cards[i],
+              ],
+            ],
+          );
+        }
+
+        final rows = <Widget>[];
+        for (var start = 0; start < cards.length; start += columns) {
+          final end =
+              start + columns < cards.length ? start + columns : cards.length;
+          final rowCards = cards.sublist(start, end);
+          rows.add(
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var j = 0; j < columns; j++) ...[
+                    if (j > 0) const SizedBox(width: gap),
+                    Expanded(
+                      child: j < rowCards.length
+                          ? rowCards[j]
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) const SizedBox(height: rowsGap),
+              rows[i],
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -1037,8 +1106,8 @@ class _DocumentsTab extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           immunizationCount == 0
-                              ? 'Not captured — tap to add'
-                              : '$immunizationCount page(s) — tap to change',
+                              ? 'Not captured tap to add'
+                              : '$immunizationCount page(s) tap to change',
                           style: AppText.caption,
                         ),
                       ],
@@ -1187,7 +1256,7 @@ class _DocumentsTab extends StatelessWidget {
   ) async {
     final path = doc.filePath;
     if (path == null || path.isEmpty) {
-      // Nothing on disk yet — offer to attach the file right here instead
+      // Nothing on disk yet offer to attach the file right here instead
       // of bouncing the user back to the registration flow.
       onEdit(doc);
       return;
@@ -1199,7 +1268,7 @@ class _DocumentsTab extends StatelessWidget {
 
     final message = switch (result.type) {
       ResultType.fileNotFound =>
-        'That file is missing from this device — it may need to be re-captured or re-synced.',
+        'That file is missing from this device it may need to be re-captured or re-synced.',
       ResultType.noAppToOpen =>
         'No app on this device can open this file type.',
       ResultType.permissionDenied =>

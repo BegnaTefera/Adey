@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'data/children_store.dart';
 import 'data/expenses_store.dart';
 import 'data/fee_types_store.dart';
@@ -14,7 +15,20 @@ import 'screens/desktop_shell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  _hideSystemNavigationBar();
   runApp(const AdeyApp());
+}
+
+/// On phones, hide the system navigation bar so the app's own bottom bar
+/// sits flush against the edge. The status bar is kept visible.
+void _hideSystemNavigationBar() {
+  if (kIsWeb) return;
+  if (Platform.isAndroid || Platform.isIOS) {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: [SystemUiOverlay.top],
+    );
+  }
 }
 
 class AdeyApp extends StatelessWidget {
@@ -65,7 +79,7 @@ class _AppStartupState extends State<_AppStartup> {
       SyncService.instance.init(),
     ]);
     // Desktop is the sync server. It listens from app open (if it hasn't
-    // been switched off in Settings) — no timers, the phone does the
+    // been switched off in Settings) no timers, the phone does the
     // calling. A failure to bind a port is shown in Settings/dashboard
     // rather than blocking the app.
     if (SettingsStore.instance.isDesktop) {

@@ -86,7 +86,7 @@ class FeeTypesStore extends ChangeNotifier {
 
   /// Tombstones the fee type: the row stays so the delete reaches other
   /// devices through sync, but every read filters it out. Age rates are
-  /// left in place — they belong to the hidden parent. Existing payments
+  /// left in place they belong to the hidden parent. Existing payments
   /// keep their fee_type_name and amounts.
   Future<void> delete(FeeType feeType) async {
     final db = await AppDatabase.instance.database;

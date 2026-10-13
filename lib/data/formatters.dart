@@ -31,7 +31,7 @@ String formatDate(DateTime date) {
   return DateFormat('MMM d, yyyy').format(date);
 }
 
-/// Same as [formatDate] but without the year — for compact list rows.
+/// Same as [formatDate] but without the year for compact list rows.
 String formatDateShort(DateTime date) {
   if (SettingsStore.instance.useEthiopianCalendar) {
     final et = date.convertToEthiopian();
@@ -43,7 +43,7 @@ String formatDateShort(DateTime date) {
 /// Clock time, e.g. "3:42 PM".
 String formatTime(DateTime time) => DateFormat('h:mm a').format(time);
 
-/// Date (honoring the calendar setting) plus clock time — for "last
+/// Date (honoring the calendar setting) plus clock time for "last
 /// synced" style timestamps.
 String formatDateTime(DateTime dateTime) =>
     '${formatDate(dateTime)}, ${formatTime(dateTime)}';

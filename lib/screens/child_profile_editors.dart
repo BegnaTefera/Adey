@@ -8,12 +8,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/document_storage.dart';
+import '../data/formatters.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_date_picker.dart';
 import '../widgets/app_feedback.dart';
 
 /// Bottom-sheet editors for a child's profile. Each returns the edited
-/// object (or null when cancelled). They never touch the database — the
+/// object (or null when cancelled). They never touch the database the
 /// calling screen persists through ChildrenStore.updateChild, so all the
 /// sync/error handling stays in one place.
 
@@ -75,8 +77,9 @@ class _EditChildSheetState extends State<_EditChildSheet> {
 
   Future<void> _pickDob() async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
+      title: 'Date of birth',
       initialDate: _dob ?? now,
       firstDate: DateTime(now.year - 30),
       lastDate: now,
@@ -148,9 +151,7 @@ class _EditChildSheetState extends State<_EditChildSheet> {
           child: InputDecorator(
             decoration: const InputDecoration(labelText: 'Date of birth'),
             child: Text(
-              _dob == null
-                  ? 'Select a date'
-                  : '${_dob!.year}-${_dob!.month.toString().padLeft(2, '0')}-${_dob!.day.toString().padLeft(2, '0')}',
+              _dob == null ? 'Select a date' : formatDate(_dob!),
               style: AppText.bodyRegular,
             ),
           ),
@@ -454,7 +455,7 @@ class _DocumentEditorSheetState extends State<_DocumentEditorSheet> {
       );
       return;
     }
-    // Editing only replaces the attached file — the name, type and status
+    // Editing only replaces the attached file the name, type and status
     // were fixed when the document was created.
     Navigator.of(context).pop(
       ChildDocument(
@@ -627,8 +628,9 @@ class _PaymentEditorSheetState extends State<_PaymentEditorSheet> {
   }
 
   Future<void> _pickDueDate() async {
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
+      title: 'Due date',
       initialDate: _dueDate,
       firstDate: DateTime(2015),
       lastDate: DateTime(DateTime.now().year + 5),

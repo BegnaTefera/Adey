@@ -188,7 +188,7 @@ Future<Uint8List> buildRegistrationPdf(RegistrationPdfData data) async {
               ),
               pw.SizedBox(height: 6),
               // One numbered section per guardian, mirroring the form's
-              // separate mother/father blocks — generalized to whatever
+              // separate mother/father blocks generalized to whatever
               // relationship was actually recorded (mother, father,
               // grandparent, etc.) rather than assuming exactly those two.
               for (var i = 0; i < data.guardians.length; i++) ...[

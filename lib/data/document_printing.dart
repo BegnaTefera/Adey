@@ -5,7 +5,7 @@ import '../models/child.dart';
 import 'document_storage.dart';
 import 'sync/sync_service.dart';
 
-/// The document's bytes aren't on this device (yet) — typically a signed
+/// The document's bytes aren't on this device (yet) typically a signed
 /// form that was registered on the phone and hasn't finished transferring.
 class DocumentUnavailableException implements Exception {
   final String message;

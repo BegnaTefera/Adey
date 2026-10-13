@@ -11,7 +11,7 @@ import 'sync_service.dart';
 
 /// Keeps the phone in step with the desktop without anyone tapping Sync.
 ///
-/// The desktop can't call the phone — it has no address for it — so this
+/// The desktop can't call the phone it has no address for it so this
 /// side drives both directions:
 ///  * a local edit schedules a sync about a second later, so pushes are
 ///    near-instant;
@@ -84,7 +84,7 @@ class AutoSync with WidgetsBindingObserver {
   void _scheduleNextPoll({Duration? delay}) {
     _poll?.cancel();
     // A run that was already in flight when the app was backgrounded
-    // finishes, then lands here — it must not re-arm while paused.
+    // finishes, then lands here it must not re-arm while paused.
     if (!_started || _paused) return;
     _poll = Timer(delay ?? _nextPollDelay, () async {
       await _run();
@@ -112,7 +112,7 @@ class AutoSync with WidgetsBindingObserver {
 
     _running = true;
     try {
-      // background: true — an automatic run must not flip the UI into the
+      // background: true an automatic run must not flip the UI into the
       // "syncing" state, or the indicator flashes every few seconds.
       final result = await SyncClient.instance.syncNow(background: true);
       if (result.ok) {

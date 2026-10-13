@@ -4,7 +4,7 @@ import 'dart:convert';
 ///
 /// [localData] is this device's row, [remoteData] is the row the other
 /// device sent. Which of those is "mobile" and which is "desktop" depends
-/// on the device that recorded it — the compare screen sorts that out.
+/// on the device that recorded it the compare screen sorts that out.
 class SyncConflict {
   final String id;
   final String tableName;

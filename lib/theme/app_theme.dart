@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Color palette — copied 1:1 from the Figma export's `src/index.css`
+/// Color palette copied 1:1 from the Figma export's `src/index.css`
 /// `@theme inline` block, so the Flutter app matches the approved design.
 class AppColors {
   AppColors._();
@@ -29,7 +29,7 @@ class AppColors {
   static const pendingTextDark = Color(0xFF8A6100);
 }
 
-/// Text styles — `DM Sans` for body/UI text, `DM Mono` for the small
+/// Text styles `DM Sans` for body/UI text, `DM Mono` for the small
 /// uppercase labels and numeric/mono figures used throughout the design.
 class AppText {
   AppText._();
@@ -118,7 +118,7 @@ ThemeData buildAppTheme() {
   );
 }
 
-/// Shared card decoration — the rounded-2xl white card with a hairline
+/// Shared card decoration the rounded-2xl white card with a hairline
 /// border used everywhere in the design (dashboard sections, list
 /// containers, profile blocks, etc.)
 BoxDecoration cardDecoration({Color? color}) {

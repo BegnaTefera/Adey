@@ -73,7 +73,7 @@ class _BillingScreenState extends State<BillingScreen> {
         label: const Text('Log payment', style: TextStyle(color: Colors.white)),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 160),
         children: [
           if (registeredChild != null) ...[
             _RegistrationBanner(

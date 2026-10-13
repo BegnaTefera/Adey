@@ -132,7 +132,7 @@ Future<void> showLogPaymentSheet(
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Matches by child or guardian name — handles small '
+                  'Matches by child or guardian name handles small '
                   'spelling differences and works in Amharic too.',
                   style: AppText.caption,
                 ),
@@ -223,7 +223,7 @@ Future<void> showLogPaymentSheet(
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Records money already received — one paid row per fee, '
+                  'Records money already received one paid row per fee, '
                   'total above is the combined amount.',
                   style: AppText.caption,
                 ),

@@ -356,7 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Auto-sync is on — edits copy to the desktop within seconds, '
+            'Auto-sync is on, edits copy to the desktop within seconds, '
             'and the desktop\'s changes appear here while the app is open.',
             style: AppText.caption,
           ),

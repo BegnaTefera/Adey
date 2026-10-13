@@ -10,6 +10,7 @@ import '../data/search_utils.dart';
 import '../data/settings_store.dart';
 import '../models/child.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_date_picker.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_filter_chip.dart';
 import '../widgets/child_avatar.dart';
@@ -308,14 +309,14 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     return ListView(
       key: const PageStorageKey('attendance-register'),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 160),
       children: [
         _daySelector(),
         const SizedBox(height: 16),
         if (AttendanceSchedule.isDayOff(_day))
           const EmptyIllustration(
             icon: Icons.weekend_outlined,
-            title: 'Sunday — day off',
+            title: 'Sunday day off',
             message: 'The daycare is closed on Sundays, so there is no '
                 'register. Pick another day to take attendance.',
           )
@@ -536,7 +537,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     return ListView(
       key: const PageStorageKey('attendance-history'),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 160),
       children: [
         Container(
           padding: const EdgeInsets.all(16),
@@ -687,8 +688,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       DateRange(_rangePreset, start: _customStart, end: _customEnd);
 
   Future<void> _pickDay() async {
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
+      title: 'Select day',
       initialDate: _day,
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
@@ -699,8 +701,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   Future<void> _pickCustom({required bool start}) async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
+      title: start ? 'Start date' : 'End date',
       initialDate: (start ? _customStart : _customEnd) ?? now,
       firstDate: DateTime(2000),
       lastDate: now,

@@ -228,7 +228,7 @@ class PaymentRecord {
   final PaymentStatus status;
   final DateTime dueDate;
   final DateTime? paidAt;
-  // e.g. "Meskerem 2018" — which billing cycle this charge is for.
+  // e.g. "Meskerem 2018" which billing cycle this charge is for.
   // Null for one-off charges (registration fee, a late-pickup fee).
   final String? cycleLabel;
 
@@ -244,7 +244,7 @@ class PaymentRecord {
   });
 
   /// A pending charge more than [overdueGraceDays] past its due date.
-  /// Not stored — computed at read time so it's never stale.
+  /// Not stored computed at read time so it's never stale.
   bool get isOverdue =>
       status == PaymentStatus.pending &&
       DateTime.now().isAfter(dueDate.add(const Duration(days: overdueGraceDays)));
@@ -404,7 +404,7 @@ class Child {
     return null;
   }
 
-  /// Age in whole months — used for age-based fee rate lookups.
+  /// Age in whole months used for age-based fee rate lookups.
   int get ageInMonths {
     final now = DateTime.now();
     var months = (now.year - dob.year) * 12 + (now.month - dob.month);
@@ -412,7 +412,7 @@ class Child {
     return months < 0 ? 0 : months;
   }
 
-  /// Matches the `getAge` helper from data.ts — years-and-months style
+  /// Matches the `getAge` helper from data.ts years-and-months style
   /// age string used across the dashboard, list, and profile.
   String get ageLabel {
     final now = DateTime.now();
@@ -428,7 +428,7 @@ class Child {
     return '${years}y ${months}mo';
   }
 
-  /// Only the child's own scalar columns — the `children` table row.
+  /// Only the child's own scalar columns the `children` table row.
   /// Nested lists (guardians, documents, attendance, payments) are
   /// stored in their own tables, keyed by child_id.
   Map<String, dynamic> toMap() => {

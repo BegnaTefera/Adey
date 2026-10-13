@@ -10,6 +10,7 @@ import '../data/search_utils.dart';
 import '../data/settings_store.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_date_picker.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_filter_chip.dart';
 import '../widgets/empty_illustration.dart';
@@ -95,7 +96,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         label: const Text('Add expense', style: TextStyle(color: Colors.white)),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 160),
         children: [
           _summaryStrip(filtered),
           const SizedBox(height: 16),
@@ -354,8 +355,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   Future<void> _pickCustom({required bool start}) async {
     final now = DateTime.now();
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
+      title: start ? 'Start date' : 'End date',
       initialDate: (start ? _customStart : _customEnd) ?? now,
       firstDate: DateTime(2000),
       lastDate: now,
@@ -451,8 +453,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       onPressed: isSaving
                           ? null
                           : () async {
-                              final picked = await showDatePicker(
+                              final picked = await showAppDatePicker(
                                 context: sheetContext,
+                                title: 'Expense date',
                                 initialDate: date,
                                 firstDate: DateTime(2000),
                                 lastDate:
@@ -640,7 +643,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete expense?'),
         content: Text(
-          '${expense.category} — ${formatEtb(expense.amount)} on '
+          '${expense.category} ${formatEtb(expense.amount)} on '
           '${formatDate(expense.date)}',
         ),
         actions: [
