@@ -7,6 +7,7 @@ import '../data/sync/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/child_avatar.dart';
+import '../widgets/empty_illustration.dart';
 
 /// Desktop only: signed registration forms that came in from the phone and
 /// still need their first print. Printing hands the stored bytes to the OS
@@ -81,11 +82,11 @@ class _PrintQueueScreenState extends State<PrintQueueScreen> {
         ),
         Expanded(
           child: items.isEmpty
-              ? Center(
-                  child: Text(
-                    'Nothing waiting to print',
-                    style: AppText.bodyMedium,
-                  ),
+              ? const EmptyIllustration(
+                  icon: Icons.print_outlined,
+                  title: 'Print queue is clear',
+                  message: 'Signed registration forms waiting for their first '
+                      'print will appear here.',
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

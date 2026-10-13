@@ -1,7 +1,7 @@
 import 'dart:io';
-
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:open_file/open_file.dart';
+import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 import '../data/children_store.dart';
 import '../data/document_storage.dart';
@@ -103,9 +103,8 @@ class _ChildProfileScreenState extends State<ChildProfileScreen>
     if (_isUpdatingEnrollmentStatus || status == _child.enrollmentStatus) {
       return;
     }
-    final nextLabel = status == EnrollmentStatus.enrolled
-        ? 'enrolled'
-        : 'withdrawn';
+    final nextLabel =
+        status == EnrollmentStatus.enrolled ? 'enrolled' : 'withdrawn';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -307,9 +306,8 @@ class _ChildProfileScreenState extends State<ChildProfileScreen>
   Future<void> _editGuardian(Guardian guardian) async {
     final updated = await showGuardianEditorSheet(context, guardian: guardian);
     if (updated == null || !mounted) return;
-    final list = _child.guardians
-        .map((g) => g.id == guardian.id ? updated : g)
-        .toList();
+    final list =
+        _child.guardians.map((g) => g.id == guardian.id ? updated : g).toList();
     await _persist(_child.copyWith(guardians: list), 'Guardian updated.');
   }
 
@@ -325,9 +323,8 @@ class _ChildProfileScreenState extends State<ChildProfileScreen>
   Future<void> _editDocument(ChildDocument document) async {
     final updated = await showDocumentEditorSheet(context, document: document);
     if (updated == null || !mounted) return;
-    final list = _child.documents
-        .map((d) => d.id == document.id ? updated : d)
-        .toList();
+    final list =
+        _child.documents.map((d) => d.id == document.id ? updated : d).toList();
     await _persist(_child.copyWith(documents: list), 'Document updated.');
   }
 
@@ -392,7 +389,9 @@ class _ChildProfileScreenState extends State<ChildProfileScreen>
 
     await _persist(
       _child.copyWith(documents: documents),
-      saved == 0 ? 'Immunization records updated.' : 'Immunization pages saved.',
+      saved == 0
+          ? 'Immunization records updated.'
+          : 'Immunization pages saved.',
     );
   }
 
@@ -404,8 +403,8 @@ class _ChildProfileScreenState extends State<ChildProfileScreen>
     try {
       await ChildrenStore.instance.updateChild(updated);
       if (mounted) {
-        showAppFeedback(context, message: message,
-            kind: AppFeedbackKind.success);
+        showAppFeedback(context,
+            message: message, kind: AppFeedbackKind.success);
       }
     } catch (error) {
       if (mounted) {
@@ -480,64 +479,64 @@ class _ChildProfileScreenState extends State<ChildProfileScreen>
                                 Text('·', style: AppText.caption),
                                 const SizedBox(width: 8),
                                 PopupMenuButton<EnrollmentStatus>(
-                                tooltip: 'Change enrollment status',
-                                enabled: !_isUpdatingEnrollmentStatus,
-                                onSelected: _changeEnrollmentStatus,
-                                itemBuilder: (_) => [
-                                  const PopupMenuItem(
-                                    value: EnrollmentStatus.enrolled,
-                                    child: Text('Enrolled'),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: EnrollmentStatus.withdrawn,
-                                    child: Text('Withdrawn'),
-                                  ),
-                                ],
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: child.enrollmentStatus ==
-                                            EnrollmentStatus.enrolled
-                                        ? AppColors.syncSoft
-                                        : AppColors.muted,
-                                    borderRadius: BorderRadius.circular(99),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        child.enrollmentStatus ==
-                                                EnrollmentStatus.enrolled
-                                            ? 'Enrolled'
-                                            : 'Withdrawn',
-                                        style: AppText.monoCaption.copyWith(
-                                          color: child.enrollmentStatus ==
+                                  tooltip: 'Change enrollment status',
+                                  enabled: !_isUpdatingEnrollmentStatus,
+                                  onSelected: _changeEnrollmentStatus,
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(
+                                      value: EnrollmentStatus.enrolled,
+                                      child: Text('Enrolled'),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: EnrollmentStatus.withdrawn,
+                                      child: Text('Withdrawn'),
+                                    ),
+                                  ],
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: child.enrollmentStatus ==
+                                              EnrollmentStatus.enrolled
+                                          ? AppColors.syncSoft
+                                          : AppColors.muted,
+                                      borderRadius: BorderRadius.circular(99),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          child.enrollmentStatus ==
                                                   EnrollmentStatus.enrolled
-                                              ? AppColors.sync
-                                              : AppColors.mutedForeground,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      if (_isUpdatingEnrollmentStatus) ...[
-                                        const SizedBox(width: 6),
-                                        const SizedBox(
-                                          width: 12,
-                                          height: 12,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
+                                              ? 'Enrolled'
+                                              : 'Withdrawn',
+                                          style: AppText.monoCaption.copyWith(
+                                            color: child.enrollmentStatus ==
+                                                    EnrollmentStatus.enrolled
+                                                ? AppColors.sync
+                                                : AppColors.mutedForeground,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
-                                      ] else
-                                        const Icon(
-                                          Icons.arrow_drop_down,
-                                          size: 18,
-                                        ),
-                                    ],
+                                        if (_isUpdatingEnrollmentStatus) ...[
+                                          const SizedBox(width: 6),
+                                          const SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          ),
+                                        ] else
+                                          const Icon(
+                                            Icons.arrow_drop_down,
+                                            size: 18,
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                ),
                                 ),
                               ],
                             ),
@@ -865,84 +864,84 @@ class _GuardiansTab extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         ...child.guardians.map((g) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: cardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: AppColors.border)),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppColors.primary,
-                      child: Text(g.initials,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(g.name,
-                              style: AppText.bodyMedium
-                                  .copyWith(fontWeight: FontWeight.w600)),
-                          Text(
-                            g.relationship +
-                                (g.isPrimary ? ' · Primary contact' : ''),
-                            style: AppText.caption,
-                          ),
-                        ],
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: cardDecoration(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: AppColors.border)),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.primary,
+                        child: Text(g.initials,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
                       ),
-                    ),
-                    if (g.authorizedPickup)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.syncSoft,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
-                              Icons.check_circle_outline,
-                              size: 14,
-                              color: AppColors.sync,
-                            ),
-                            const SizedBox(width: 4),
+                            Text(g.name,
+                                style: AppText.bodyMedium
+                                    .copyWith(fontWeight: FontWeight.w600)),
                             Text(
-                              'Pickup',
-                              style: AppText.monoCaption
-                                  .copyWith(color: AppColors.sync),
+                              g.relationship +
+                                  (g.isPrimary ? ' · Primary contact' : ''),
+                              style: AppText.caption,
                             ),
                           ],
                         ),
                       ),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined,
-                          size: 18, color: AppColors.mutedForeground),
-                      tooltip: 'Edit guardian',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => onEditGuardian(g),
-                    ),
-                  ],
+                      if (g.authorizedPickup)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.syncSoft,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.check_circle_outline,
+                                size: 14,
+                                color: AppColors.sync,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Pickup',
+                                style: AppText.monoCaption
+                                    .copyWith(color: AppColors.sync),
+                              ),
+                            ],
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined,
+                            size: 18, color: AppColors.mutedForeground),
+                        tooltip: 'Edit guardian',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => onEditGuardian(g),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              ..._guardianDetailRows(g),
-            ],
-          ),
-        );
-      }),
+                ..._guardianDetailRows(g),
+              ],
+            ),
+          );
+        }),
         const SizedBox(height: 4),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -982,11 +981,13 @@ class _GuardiansTab extends StatelessWidget {
                 final person = child.additionalPickupPeople[i];
                 final isLast = i == child.additionalPickupPeople.length - 1;
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   decoration: BoxDecoration(
                     border: isLast
                         ? null
-                        : const Border(bottom: BorderSide(color: AppColors.border)),
+                        : const Border(
+                            bottom: BorderSide(color: AppColors.border)),
                   ),
                   child: Row(
                     children: [
@@ -1039,8 +1040,10 @@ class _DocumentsTab extends StatelessWidget {
   (Color, Color) _statusColors(DocumentStatus s) {
     return switch (s) {
       DocumentStatus.onFile => (AppColors.syncSoft, AppColors.sync),
-      DocumentStatus.pending =>
-        (AppColors.pendingSoft, AppColors.pendingTextDark),
+      DocumentStatus.pending => (
+          AppColors.pendingSoft,
+          AppColors.pendingTextDark
+        ),
       DocumentStatus.expired => (AppColors.dangerSoft, AppColors.danger),
     };
   }
@@ -1134,93 +1137,98 @@ class _DocumentsTab extends StatelessWidget {
           )
         else
           Container(
-      decoration: cardDecoration(),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: List.generate(otherDocuments.length, (i) {
-          final doc = otherDocuments[i];
-          final isLast = i == otherDocuments.length - 1;
-          final (bg, fg) = _statusColors(doc.status);
-          final canOpen = doc.filePath != null && doc.filePath!.isNotEmpty;
-          return InkWell(
-            onTap: () => _openDocument(context, doc, onEdit),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                border: isLast
-                    ? null
-                    : const Border(bottom: BorderSide(color: AppColors.border)),
-              ),
-              child: Row(
-                children: [
-                  ExcludeSemantics(
-                    child: Icon(
-                      _icons[doc.type] ?? Icons.description_outlined,
-                      size: 20,
-                      color: AppColors.primary,
+            decoration: cardDecoration(),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: List.generate(otherDocuments.length, (i) {
+                final doc = otherDocuments[i];
+                final isLast = i == otherDocuments.length - 1;
+                final (bg, fg) = _statusColors(doc.status);
+                final canOpen =
+                    doc.filePath != null && doc.filePath!.isNotEmpty;
+                return InkWell(
+                  onTap: () => _openDocument(context, doc, onEdit),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
+                    decoration: BoxDecoration(
+                      border: isLast
+                          ? null
+                          : const Border(
+                              bottom: BorderSide(color: AppColors.border)),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Text(doc.label, style: AppText.bodyMedium),
-                        Text(formatDate(doc.uploadedAt),
-                            style: AppText.caption),
-                        // Mobile can't print, so for the registration form it
-                        // just reports whether the office copy got done.
-                        if (!isDesktop && doc.type == DocumentType.registration)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: _PrintStatusChip(printed: doc.printed),
+                        ExcludeSemantics(
+                          child: Icon(
+                            _icons[doc.type] ?? Icons.description_outlined,
+                            size: 20,
+                            color: AppColors.primary,
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(doc.label, style: AppText.bodyMedium),
+                              Text(formatDate(doc.uploadedAt),
+                                  style: AppText.caption),
+                              // Mobile can't print, so for the registration form it
+                              // just reports whether the office copy got done.
+                              if (!isDesktop &&
+                                  doc.type == DocumentType.registration)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: _PrintStatusChip(printed: doc.printed),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: bg,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(_statusLabel(doc.status),
+                              style: AppText.monoCaption.copyWith(
+                                  color: fg, fontWeight: FontWeight.w600)),
+                        ),
+                        // Reprinting stays available whatever `printed` says: a lost
+                        // copy never needs anything un-queued first.
+                        if (isDesktop &&
+                            (canOpen || (doc.sha256 ?? '').isNotEmpty))
+                          IconButton(
+                            icon: const Icon(Icons.print_outlined, size: 20),
+                            tooltip: 'Print',
+                            onPressed: () => _printDocument(context, doc),
+                          ),
+                        PopupMenuButton<String>(
+                          tooltip: 'Document actions',
+                          icon: const Icon(Icons.more_vert,
+                              size: 18, color: AppColors.mutedForeground),
+                          onSelected: (value) {
+                            if (value == 'edit') onEdit(doc);
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          canOpen ? Icons.chevron_right : Icons.hourglass_empty,
+                          size: 18,
+                          color: AppColors.mutedForeground,
+                        ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: Text(_statusLabel(doc.status),
-                        style: AppText.monoCaption
-                            .copyWith(color: fg, fontWeight: FontWeight.w600)),
-                  ),
-                  // Reprinting stays available whatever `printed` says: a lost
-                  // copy never needs anything un-queued first.
-                  if (isDesktop && (canOpen || (doc.sha256 ?? '').isNotEmpty))
-                    IconButton(
-                      icon: const Icon(Icons.print_outlined, size: 20),
-                      tooltip: 'Print',
-                      onPressed: () => _printDocument(context, doc),
-                    ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Document actions',
-                    icon: const Icon(Icons.more_vert,
-                        size: 18, color: AppColors.mutedForeground),
-                    onSelected: (value) {
-                      if (value == 'edit') onEdit(doc);
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    canOpen ? Icons.chevron_right : Icons.hourglass_empty,
-                    size: 18,
-                    color: AppColors.mutedForeground,
-                  ),
-                ],
-              ),
+                );
+              }),
             ),
-          );
-        }),
-      ),
-    ),
+          ),
       ],
     );
   }
@@ -1254,35 +1262,125 @@ class _DocumentsTab extends StatelessWidget {
     ChildDocument doc,
     ValueChanged<ChildDocument> onEdit,
   ) async {
-    final path = doc.filePath;
-    if (path == null || path.isEmpty) {
-      // Nothing on disk yet offer to attach the file right here instead
-      // of bouncing the user back to the registration flow.
-      onEdit(doc);
-      return;
+    try {
+      var path = doc.filePath;
+      if (path == null || path.isEmpty) {
+        final hash = doc.sha256;
+        if (hash == null || hash.isEmpty) {
+          onEdit(doc);
+          return;
+        }
+        path = await SyncService.instance.pathForHash(hash);
+      }
+
+      if (path == null) {
+        if (!context.mounted) return;
+        showAppFeedback(
+          context,
+          message:
+              "This document isn't available on this device yet. Sync and try again.",
+          kind: AppFeedbackKind.info,
+        );
+        return;
+      }
+
+      final bytes = await DocumentStorage.readBytes(path);
+      if (!context.mounted) return;
+      if (bytes == null) {
+        showAppFeedback(
+          context,
+          message: 'Could not read this document from this device.',
+          kind: AppFeedbackKind.error,
+        );
+        return;
+      }
+
+      final isPdf = bytes.length >= 4 &&
+          bytes[0] == 0x25 &&
+          bytes[1] == 0x50 &&
+          bytes[2] == 0x44 &&
+          bytes[3] == 0x46;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => _DocumentViewerScreen(
+            title: doc.label,
+            bytes: bytes,
+            isPdf: isPdf,
+            canShare: doc.type == DocumentType.registration && isPdf,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not open this document: $error',
+        kind: AppFeedbackKind.error,
+      );
     }
+  }
+}
 
-    final result = await OpenFile.open(path);
-    if (result.type == ResultType.done) return;
-    if (!context.mounted) return;
+class _DocumentViewerScreen extends StatelessWidget {
+  final String title;
+  final Uint8List bytes;
+  final bool isPdf;
+  final bool canShare;
 
-    final message = switch (result.type) {
-      ResultType.fileNotFound =>
-        'That file is missing from this device it may need to be re-captured or re-synced.',
-      ResultType.noAppToOpen =>
-        'No app on this device can open this file type.',
-      ResultType.permissionDenied =>
-        'Permission denied trying to open this file.',
-      _ => 'Could not open this document (${result.message}).',
-    };
-    showAppFeedback(
-      context,
-      message: message,
-      kind: AppFeedbackKind.error,
-      actionLabel: result.type == ResultType.fileNotFound ? null : 'Retry',
-      onAction: result.type == ResultType.fileNotFound
-          ? null
-          : () => _openDocument(context, doc, onEdit),
+  const _DocumentViewerScreen({
+    required this.title,
+    required this.bytes,
+    required this.isPdf,
+    required this.canShare,
+  });
+
+  Future<void> _shareDocument(BuildContext context) async {
+    try {
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: 'signed_registration.pdf',
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      showAppFeedback(
+        context,
+        message: 'Could not share this document: $error',
+        kind: AppFeedbackKind.error,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(title, style: AppText.bodyMedium),
+        actions: [
+          if (canShare)
+            IconButton(
+              tooltip: 'Share signed registration',
+              onPressed: () => _shareDocument(context),
+              icon: const Icon(Icons.share_outlined),
+            ),
+        ],
+      ),
+      body: isPdf
+          ? PdfPreview(
+              build: (_) async => bytes,
+              allowPrinting: false,
+              allowSharing: false,
+              canChangePageFormat: false,
+              canChangeOrientation: false,
+              useActions: false,
+            )
+          : Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5,
+                child: Image.memory(bytes, fit: BoxFit.contain),
+              ),
+            ),
     );
   }
 }

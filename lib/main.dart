@@ -13,18 +13,21 @@ import 'theme/app_theme.dart';
 import 'screens/app_shell.dart';
 import 'screens/desktop_shell.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  _hideSystemNavigationBar();
+  await _hideSystemNavigationBar();
   runApp(const AdeyApp());
 }
 
 /// On phones, hide the system navigation bar so the app's own bottom bar
 /// sits flush against the edge. The status bar is kept visible.
-void _hideSystemNavigationBar() {
+Future<void> _hideSystemNavigationBar() async {
   if (kIsWeb) return;
-  if (Platform.isAndroid || Platform.isIOS) {
-    SystemChrome.setEnabledSystemUIMode(
+  if (Platform.isAndroid) {
+    await const MethodChannel('com.example.adey/system_ui')
+        .invokeMethod<void>('hideNavigationBar');
+  } else if (Platform.isIOS) {
+    await SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: [SystemUiOverlay.top],
     );
@@ -144,7 +147,8 @@ class _AppStartupState extends State<_AppStartup> {
             ),
           );
         }
-        final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+        final isDesktop = !kIsWeb &&
+            (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
         return isDesktop ? const DesktopShell() : const AppShell();
       },
     );

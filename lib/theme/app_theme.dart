@@ -1,3 +1,4 @@
+// lib/theme/app_theme.dart
 import 'package:flutter/material.dart';
 
 /// Color palette copied 1:1 from the Figma export's `src/index.css`
@@ -102,6 +103,16 @@ ThemeData buildAppTheme() {
     scaffoldBackgroundColor: AppColors.background,
     fontFamily: 'DMSans',
     fontFamilyFallback: const ['NotoSansEthiopic'],
+    textTheme: TextTheme(
+      displayLarge: AppText.bigNumber,
+      titleLarge: AppText.sectionTitle,
+      titleMedium: AppText.bodyMedium,
+      bodyLarge: AppText.bodyRegular,
+      bodyMedium: AppText.bodyRegular,
+      bodySmall: AppText.caption,
+      labelLarge: AppText.bodyMedium,
+      labelSmall: AppText.monoCaption,
+    ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
@@ -109,11 +120,149 @@ ThemeData buildAppTheme() {
       error: AppColors.danger,
     ),
     dividerColor: AppColors.border,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: AppColors.card,
       foregroundColor: AppColors.foreground,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
+      titleTextStyle: AppText.sectionTitle,
+    ),
+    cardTheme: CardThemeData(
+      color: AppColors.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.border),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.primaryForeground,
+        textStyle:
+            AppText.bodyMedium.copyWith(color: AppColors.primaryForeground),
+        minimumSize: const Size(64, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.primaryForeground,
+        textStyle:
+            AppText.bodyMedium.copyWith(color: AppColors.primaryForeground),
+        minimumSize: const Size(64, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 0,
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.primary,
+        textStyle: AppText.bodyMedium.copyWith(color: AppColors.primary),
+        minimumSize: const Size(64, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        side: const BorderSide(color: AppColors.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.primary,
+        textStyle: AppText.bodyMedium.copyWith(color: AppColors.primary),
+        minimumSize: const Size(48, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: AppColors.primary,
+      foregroundColor: AppColors.primaryForeground,
+      elevation: 2,
+      shape: StadiumBorder(),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: AppColors.card,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      hintStyle: AppText.caption,
+      labelStyle:
+          AppText.bodyRegular.copyWith(color: AppColors.mutedForeground),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.danger, width: 1.5),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.border),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: AppColors.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      height: 80,
+      indicatorColor: AppColors.primary.withValues(alpha: 0.12),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      labelTextStyle: WidgetStateProperty.resolveWith((states) {
+        final selected = states.contains(WidgetState.selected);
+        return AppText.caption.copyWith(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: selected ? AppColors.primary : AppColors.mutedForeground,
+        );
+      }),
+      iconTheme: WidgetStateProperty.resolveWith((states) {
+        final selected = states.contains(WidgetState.selected);
+        return IconThemeData(
+          color: selected ? AppColors.primary : AppColors.mutedForeground,
+        );
+      }),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: AppColors.card,
+      modalBackgroundColor: AppColors.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      modalElevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      showDragHandle: true,
+      dragHandleColor: AppColors.border,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: AppColors.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      titleTextStyle: AppText.sectionTitle,
+      contentTextStyle: AppText.bodyRegular,
+    ),
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+      },
     ),
   );
 }

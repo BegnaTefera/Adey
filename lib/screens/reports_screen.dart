@@ -8,6 +8,7 @@ import '../data/settings_store.dart';
 import '../models/child.dart';
 import '../models/expense.dart';
 import '../theme/app_theme.dart';
+import '../widgets/empty_illustration.dart';
 import '../widgets/child_avatar.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -50,8 +51,8 @@ class _ReportsScreenState extends State<ReportsScreen>
       period: _period,
       useEthiopianCalendar: SettingsStore.instance.useEthiopianCalendar,
     );
-    final billingCount =
-        report.billingByMonth.fold<int>(0, (sum, group) => sum + group.rows.length);
+    final billingCount = report.billingByMonth
+        .fold<int>(0, (sum, group) => sum + group.rows.length);
     final expenseCount = report.expensesByMonth
         .fold<int>(0, (sum, group) => sum + group.rows.length);
 
@@ -90,8 +91,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
-                            onSelected: (_) =>
-                                setState(() => _period = period),
+                            onSelected: (_) => setState(() => _period = period),
                           ),
                       ],
                     ),
@@ -238,8 +238,11 @@ class _StatTile extends StatelessWidget {
 (Color, Color, String) _paymentStatusDisplay(PaymentRecord payment) {
   return switch (payment.status) {
     PaymentStatus.paid => (AppColors.syncSoft, AppColors.sync, 'Paid'),
-    PaymentStatus.cancelled =>
-      (AppColors.muted, AppColors.mutedForeground, 'Cancelled'),
+    PaymentStatus.cancelled => (
+        AppColors.muted,
+        AppColors.mutedForeground,
+        'Cancelled'
+      ),
     PaymentStatus.pending => payment.isOverdue
         ? (AppColors.dangerSoft, AppColors.danger, 'Overdue')
         : (AppColors.pendingSoft, AppColors.pendingTextDark, 'Pending'),
@@ -253,7 +256,7 @@ class _BillingTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (report.billingByMonth.isEmpty) {
-      return const _EmptyState(
+      return const EmptyIllustration(
         icon: Icons.receipt_long_outlined,
         title: 'No payments in this period',
         message: 'Try selecting a wider period.',
@@ -318,8 +321,7 @@ class _BillingRow extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: bg,
                   borderRadius: BorderRadius.circular(99),
@@ -348,7 +350,7 @@ class _ExpensesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (report.expensesByMonth.isEmpty) {
-      return const _EmptyState(
+      return const EmptyIllustration(
         icon: Icons.payments_outlined,
         title: 'No expenses in this period',
         message: 'Try selecting a wider period.',
@@ -366,8 +368,7 @@ class _ExpensesTab extends StatelessWidget {
               style: AppText.monoLabel,
             ),
           ),
-          for (final expense in group.rows)
-            _ExpenseRow(expense: expense),
+          for (final expense in group.rows) _ExpenseRow(expense: expense),
           const SizedBox(height: 20),
         ],
       ],
@@ -420,36 +421,6 @@ class _ExpenseRow extends StatelessWidget {
             style: AppText.bodyMedium.copyWith(fontWeight: FontWeight.w600),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 32, color: AppColors.mutedForeground),
-            const SizedBox(height: 12),
-            Text(title, style: AppText.bodyMedium),
-            const SizedBox(height: 4),
-            Text(message, style: AppText.caption, textAlign: TextAlign.center),
-          ],
-        ),
       ),
     );
   }

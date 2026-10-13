@@ -109,7 +109,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Icon(Icons.dns_outlined, color: AppColors.primary),
               const SizedBox(width: 8),
               Text('Sync server',
-                  style: AppText.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  style:
+                      AppText.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 4),
@@ -119,7 +120,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: Text(
               running
                   ? '$devices ${devices == 1 ? 'device' : 'devices'} connected today'
-                  : (server.lastError ?? 'The phone can\'t sync while this is off.'),
+                  : (server.lastError ??
+                      'The phone can\'t sync while this is off.'),
               style: AppText.caption.copyWith(
                 color: !running && server.lastError != null
                     ? AppColors.danger
@@ -131,67 +133,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: _toggleServer,
           ),
           const Divider(height: 24, color: AppColors.border),
-          Text('Address (also inside the QR code)', style: AppText.caption),
-          const SizedBox(height: 4),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: SelectableText(
-                  _serverIp == null
-                      ? 'Searching…'
-                      : '$_serverIp:${server.port}',
-                  style: AppText.monoCaption.copyWith(
-                    fontSize: 16,
-                    color: AppColors.foreground,
-                  ),
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Address (also inside the QR code)',
+                        style: AppText.caption),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SelectableText(
+                            _serverIp == null
+                                ? 'Searching…'
+                                : '$_serverIp:${server.port}',
+                            style: AppText.monoCaption.copyWith(
+                              fontSize: 16,
+                              color: AppColors.foreground,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Refresh address',
+                          icon: const Icon(Icons.refresh, size: 18),
+                          onPressed: _loadIp,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text('Pairing code', style: AppText.caption),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        SelectableText(
+                          server.pairingCode,
+                          style: AppText.monoCaption.copyWith(
+                            fontSize: 22,
+                            letterSpacing: 4,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Copy code',
+                          icon: const Icon(Icons.copy_outlined, size: 18),
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: server.pairingCode),
+                            );
+                            if (!mounted) return;
+                            showAppFeedback(
+                              context,
+                              message: 'Pairing code copied.',
+                              kind: AppFeedbackKind.info,
+                            );
+                          },
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _regenerateCode,
+                          child: const Text('New code'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Refresh address',
-                icon: const Icon(Icons.refresh, size: 18),
-                onPressed: _loadIp,
+              const SizedBox(width: 20),
+              Column(
+                children: [
+                  Text('Scan to pair from the phone', style: AppText.caption),
+                  const SizedBox(height: 12),
+                  _pairingQr(server: server, running: running),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text('Pairing code', style: AppText.caption),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              SelectableText(
-                server.pairingCode,
-                style: AppText.monoCaption.copyWith(
-                  fontSize: 22,
-                  letterSpacing: 4,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Copy code',
-                icon: const Icon(Icons.copy_outlined, size: 18),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: server.pairingCode));
-                  if (!mounted) return;
-                  showAppFeedback(
-                    context,
-                    message: 'Pairing code copied.',
-                    kind: AppFeedbackKind.info,
-                  );
-                },
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: _regenerateCode,
-                child: const Text('New code'),
-              ),
-            ],
-          ),
-          const Divider(height: 24, color: AppColors.border),
-          Text('Scan to pair from the phone', style: AppText.caption),
-          const SizedBox(height: 12),
-          Center(child: _pairingQr(server: server, running: running)),
         ],
       ),
     );
@@ -239,7 +261,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!started && mounted) {
         showAppFeedback(
           context,
-          message: SyncServer.instance.lastError ?? 'Could not start the sync server.',
+          message: SyncServer.instance.lastError ??
+              'Could not start the sync server.',
           kind: AppFeedbackKind.error,
         );
       }
@@ -295,7 +318,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const Icon(Icons.sync, color: AppColors.primary),
               const SizedBox(width: 8),
               Text('Sync with desktop',
-                  style: AppText.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  style:
+                      AppText.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 4),
@@ -384,7 +408,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _saveConnection() async {
     await SettingsStore.instance.setSyncServerIp(_desktopIpController.text);
-    await SettingsStore.instance.setSyncPairingCode(_pairingCodeController.text);
+    await SettingsStore.instance
+        .setSyncPairingCode(_pairingCodeController.text);
     if (mounted) FocusScope.of(context).unfocus();
   }
 
