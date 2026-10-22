@@ -18,11 +18,13 @@ class DashboardScreen extends StatefulWidget {
     this.onOpenAttendance,
     this.onOpenBilling,
     this.onOpenExpenses,
+    this.onRegister,
   });
 
   final VoidCallback? onOpenAttendance;
   final VoidCallback? onOpenBilling;
   final VoidCallback? onOpenExpenses;
+  final VoidCallback? onRegister;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -137,6 +139,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   MaterialPageRoute(builder: (_) => const ExpensesScreen()),
                 ),
               ),
+              if (widget.onRegister != null)
+                _QuickAction(
+                  label: 'Register',
+                  icon: Icons.person_add_alt_1_outlined,
+                  onTap: widget.onRegister!,
+                ),
             ],
           ),
           const SizedBox(height: 28),

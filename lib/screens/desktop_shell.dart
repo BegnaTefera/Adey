@@ -52,8 +52,8 @@ class _DesktopShellState extends State<DesktopShell> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _openRegister() async {
-    await startRegistration(
+  void _openRegister() {
+    startRegistration(
       context,
       onOpenBilling: () => setState(() => _activeTab = _DesktopTab.billing),
     );

@@ -43,18 +43,6 @@ class _AppShellState extends State<AppShell> {
     setState(() => _screen = screen);
   }
 
-  void _onNavigationSelected(int index) {
-    if (index == 2) {
-      startRegistration(
-        context,
-        onOpenBilling: () => setState(() => _screen = _Screen.billing),
-      );
-      return;
-    }
-
-    _selectScreen(_Screen.values[index < 2 ? index : index - 1]);
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -76,6 +64,11 @@ class _AppShellState extends State<AppShell> {
                     DashboardScreen(
                       onOpenAttendance: () => _selectScreen(_Screen.attendance),
                       onOpenBilling: () => _selectScreen(_Screen.billing),
+                      onRegister: () => startRegistration(
+                        context,
+                        onOpenBilling: () =>
+                            setState(() => _screen = _Screen.billing),
+                      ),
                     ),
                     const AttendanceScreen(),
                     const BillingScreen(),
@@ -91,61 +84,36 @@ class _AppShellState extends State<AppShell> {
             ],
           ),
         ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: const BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-            ),
-            child: NavigationBar(
-              animationDuration: const Duration(milliseconds: 300),
-              selectedIndex: _screen.index < 2 ? _screen.index : _screen.index + 1,
-              onDestinationSelected: _onNavigationSelected,
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: 'Dashboard',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.event_available_outlined),
-                  selectedIcon: Icon(Icons.event_available),
-                  label: 'Attendance',
-                ),
-                NavigationDestination(
-                  icon: CircleAvatar(
-                    radius: 21,
-                    backgroundColor: AppColors.primary,
-                    child: Icon(
-                      Icons.add,
-                      color: AppColors.primaryForeground,
-                    ),
-                  ),
-                  selectedIcon: CircleAvatar(
-                    radius: 21,
-                    backgroundColor: AppColors.primary,
-                    child: Icon(
-                      Icons.add,
-                      color: AppColors.primaryForeground,
-                    ),
-                  ),
-                  label: 'Register',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  selectedIcon: Icon(Icons.receipt_long),
-                  label: 'Billing',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.people_outline),
-                  selectedIcon: Icon(Icons.people),
-                  label: 'Children',
-                ),
-              ],
-            ),
+        bottomNavigationBar: DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+          ),
+          child: NavigationBar(
+            selectedIndex: _screen.index,
+            onDestinationSelected: (index) =>
+                _selectScreen(_Screen.values[index]),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Dashboard',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.event_available_outlined),
+                selectedIcon: Icon(Icons.event_available),
+                label: 'Attendance',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.receipt_long_outlined),
+                selectedIcon: Icon(Icons.receipt_long),
+                label: 'Billing',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: 'Children',
+              ),
+            ],
           ),
         ),
       ),

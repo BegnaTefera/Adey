@@ -217,7 +217,7 @@ ThemeData buildAppTheme() {
       backgroundColor: AppColors.card,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      height: 80,
+      height: 72,
       indicatorColor: AppColors.primary.withValues(alpha: 0.12),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
